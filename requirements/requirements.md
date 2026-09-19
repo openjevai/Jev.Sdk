@@ -132,6 +132,22 @@ null dropped the member, emitting a body that omits a field the specification de
 When adding a member of this shape, apply the guard to every member of the shape rather than to the
 one that was reported. The first pass fixed `models` and missed `answers`.
 
+### R3c — Dated captures of the vendor documents
+
+Any claim that the library diverges from the vendor's documentation must be checkable against the
+exact document text it was based on.
+
+`requirements/vendor/` holds byte-identical dated captures of the vendor's prose reference
+(`https://docs.typesafe.ai/api.md`), each with a provenance sidecar recording the fetch time, response
+headers, byte count, and SHA-256. Captures are additive: an existing file is never overwritten or
+corrected, so the set remains a record of what was documented on each date, and a later change is
+visible as a diff between two dated copies rather than as a silently updated file.
+
+The machine-readable specification (`https://api.typesafe.ai/openapi.json`) governs where the two
+disagree, because it is the artifact the service validates against. The prose reference is captured
+because it carries behavioural guidance the specification omits, because it is what a human reviewer
+reads, and because it is the document the vendor is most likely to edit.
+
 ### R4 — Structured values
 
 `state`, question `instructions`, Choice option descriptions, Score levels, Noul

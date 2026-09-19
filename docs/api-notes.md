@@ -222,6 +222,15 @@ immediately.
 
 ## 6. Where the documentation and the specification disagree
 
+Every claim in this section is made against a dated capture of the vendor's prose reference, kept in
+`requirements/vendor/`. The captures are byte-identical to what the vendor served and are never
+overwritten, so a later disagreement can be resolved by diffing two dated copies rather than by
+arguing from memory. See `requirements/vendor/PROVENANCE.md` for per-capture hashes.
+
+| Captured (UTC) | File | SHA-256 (first 16) |
+| --- | --- | --- |
+| 2026-09-19T08:17:31Z | `requirements/vendor/typesafe-api-2026-09-19T081731Z.md` | `b9b205096ac164e2` |
+
 Four discrepancies were found by comparing `api.md` against the live
 specification. In each case the specification wins.
 
