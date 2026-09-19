@@ -176,7 +176,7 @@ public sealed partial class JevClient
 
             if (isSystemOne && result is SystemOneResponse systemOne && systemOne.Usage is { } usage)
             {
-                JevLog.AnswersReceived(_logger, systemOne.Answers.Count, usage.InputTokens, usage.OutputTokens);
+                JevLog.AnswersReceived(_logger, systemOne.AnswersOrEmpty.Count, usage.InputTokens, usage.OutputTokens);
 
                 JevTelemetry.InputTokens.Add(usage.InputTokens);
                 JevTelemetry.OutputTokens.Add(usage.OutputTokens);

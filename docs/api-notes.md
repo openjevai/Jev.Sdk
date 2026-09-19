@@ -399,6 +399,38 @@ The lesson is worth recording: a property-name diff, however thorough, verifies 
 *behaviour*. The three fixes above changed no public signature and no schema mapping — a diff would
 have stayed green through all of them.
 
+## 6e. A second verification pass, and what it found
+
+A second independent adversarial pass, run against the live specification, found three defects using
+execution rather than reading. The first is the same class as one already fixed, which is the point
+worth recording: a fix applied to one member does not protect its siblings.
+
+**MAJOR — a JSON null for `answers` escaped the documented failure set.** `SystemOneResponse.Answers`
+went to a C# null, with three consequences from that one fact. The indexer threw
+`NullReferenceException` where it documents `KeyNotFoundException`. The success path dereferenced the
+null dictionary while logging the answer count, so a 200 whose body was
+`{"answers":null}` produced a raw `NullReferenceException` from a call whose documented failures are
+all `JevException` types. And because `WhenWritingNull` was in force, re-serializing dropped the
+member entirely — emitting a body that omits a field the specification declares **required**.
+
+This is precisely the defect fixed for `ModelListResponse.Models` one commit earlier, and it was
+missed for `answers`. The lesson is that a guard written for one nullable member should be applied by
+searching for every member of the same shape, not by fixing the one that was reported.
+
+**MEDIUM — two methods documented a fallback they did not always provide.** `ResolveModelAsync` and
+`WarmModelsAsync` are documented as returning a value rather than throwing when a listing fails, but
+caught only `JevException`. The transport is a documented substitution point, so a host implementation
+throwing its own exception type escaped both, and a caller who followed the documentation — no
+try/catch — saw the exception it was told not to expect. Both now catch any non-cancellation
+exception.
+
+**LOW — whitespace-only instructions passed local validation.** `Noul("   ")` produces a text-shaped
+`StructuredValue` that a null check does not catch, so the request was sent and rejected by the
+server — the exact server round trip local validation exists to prevent. The same file already
+rejected a blank question id and a blank option name, so this was an inconsistency rather than a
+decision. Structured instructions are deliberately still accepted, because an empty JSON object is
+content even though its string view is null.
+
 ## 7. Client design consequences
 
 - **Model discovery is required**, not optional — it is the only documented way

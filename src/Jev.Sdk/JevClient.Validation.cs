@@ -63,12 +63,33 @@ public sealed partial class JevClient
         }
     }
 
+    /// <summary>
+    /// True when an instruction member is absent, JSON null, or whitespace-only text.
+    /// </summary>
+    /// <remarks>
+    /// The whitespace case matters because the question factories route a string through
+    /// <c>StructuredValue.FromString</c>, so <c>Noul("   ")</c> produces a text-shaped value that a
+    /// null check does not catch. Without this the request is sent and rejected by the server, which
+    /// is precisely the round trip local validation exists to prevent. Structured instructions are
+    /// never blank, because a JSON object or array is content even when its text is empty, which is
+    /// why this checks <c>AsString()</c> rather than the raw text.
+    /// </remarks>
+    private static bool IsBlank(StructuredValue? instructions)
+    {
+        if (instructions is null || instructions.IsNull)
+        {
+            return true;
+        }
+
+        return instructions.AsString() is { } text && string.IsNullOrWhiteSpace(text);
+    }
+
     private static void ValidateQuestion(string questionId, Question question, List<string> problems)
     {
         switch (question)
         {
             case NoulQuestion noul:
-                if (noul.Instructions is null || noul.Instructions.IsNull)
+                if (IsBlank(noul.Instructions))
                 {
                     // The API accepts a question with no instructions, because the specification
                     // marks the member optional, but a question that asks nothing produces a
@@ -80,7 +101,7 @@ public sealed partial class JevClient
                 break;
 
             case ChoiceQuestion choice:
-                if (choice.Instructions is null || choice.Instructions.IsNull)
+                if (IsBlank(choice.Instructions))
                 {
                     problems.Add($"Choice question '{questionId}' needs instructions saying what to decide.");
                 }
@@ -101,7 +122,7 @@ public sealed partial class JevClient
                 break;
 
             case ScoreQuestion score:
-                if (score.Instructions is null || score.Instructions.IsNull)
+                if (IsBlank(score.Instructions))
                 {
                     problems.Add($"Score question '{questionId}' needs instructions saying what to rate.");
                 }

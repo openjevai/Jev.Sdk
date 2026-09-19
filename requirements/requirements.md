@@ -113,6 +113,25 @@ Computed members — `Usage.TotalTokens`, `ModelMetadata.ParsedReleaseDate`,
 `ErrorDetails.LocationPath` — are `[JsonIgnore]`, because they are calculated here rather than
 reported by the API, and a payload that echoes invented fields is a protocol deviation.
 
+### R3b — Nullable wire members
+
+Any member the API may send as JSON null must have a never-null accessor for reading, and must
+still be written on serialization.
+
+Two members have this shape and both are handled the same way now:
+
+| Member | Never-null read | Wire behaviour |
+| --- | --- | --- |
+| `ModelListResponse.Models` | `ModelsOrEmpty` | written from the nullable view |
+| `SystemOneResponse.Answers` | `AnswersOrEmpty` | written from `AnswersForWire`, so a required member is always emitted |
+
+The rule exists because a null from either produced a failure outside the documented set. For
+`answers` it was worse than an exception: because `WhenWritingNull` is in force, re-serializing a
+null dropped the member, emitting a body that omits a field the specification declares required.
+
+When adding a member of this shape, apply the guard to every member of the shape rather than to the
+one that was reported. The first pass fixed `models` and missed `answers`.
+
 ### R4 — Structured values
 
 `state`, question `instructions`, Choice option descriptions, Score levels, Noul
@@ -441,6 +460,9 @@ non-breaking; removing one would not be.
 | D26 | Computed members are `[JsonIgnore]`; a serialized response never carries a field the API does not define |
 | D27 | A client instance is safe for concurrent use: no lock on the model-cache hit path, one request per burst of concurrent first reads, atomic disposal, and cached type-information resolution |
 | D28 | Defensive threading changes are labelled as defensive in the requirements; a green test is never presented as proof of a defect that was not observable |
+| D29 | Every member the API may null has a never-null read accessor and a wire view that always emits it; a null wire member is never the reason a call fails outside the documented exception set |
+| D30 | Methods documented to fall back rather than throw catch every non-cancellation exception, not only `JevException`, because the transport is a documented substitution point |
+| D31 | Local validation rejects whitespace-only instructions, matching its existing treatment of blank question ids and option names; structured instructions are never treated as blank |
 
 ---
 

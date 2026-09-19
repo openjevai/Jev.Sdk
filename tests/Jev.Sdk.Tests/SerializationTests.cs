@@ -51,7 +51,7 @@ public class SerializationTests
         Assert.Contains("\"isUrgent\"", payload, StringComparison.Ordinal);
         Assert.DoesNotContain("\"is_urgent\"", payload, StringComparison.Ordinal);
 
-        Assert.True(response.Answers.ContainsKey(mixedCaseId));
+        Assert.True(response.AnswersOrEmpty.ContainsKey(mixedCaseId));
         Assert.Equal(0.9, response[mixedCaseId].AsNoul().Noul, 4);
     }
 

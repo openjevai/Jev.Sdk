@@ -161,9 +161,15 @@ public sealed partial class JevClient
     /// <returns>A model name the account can use.</returns>
     /// <remarks>
     /// Useful when a caller wants the best available concrete model rather than an alias, for
-    /// logging or for pinning behaviour. If the list cannot be fetched this returns
-    /// <see cref="DefaultModel"/> rather than throwing, because a caller asking "which model should
-    /// I use?" is better served by a workable default than by a failure.
+    /// logging or for pinning behaviour.
+    /// <para>
+    /// If the listing fails with a <see cref="JevException"/> — a network problem, a bad key, a rate
+    /// limit — this returns <paramref name="preferred"/> or <see cref="DefaultModel"/> rather than
+    /// throwing, because a caller asking "which model should I use?" is better served by a workable
+    /// default than by a failure. Cancellation is not caught: a caller that cancelled wants to know.
+    /// A programming error such as an <see cref="ObjectDisposedException"/> also propagates, since
+    /// hiding it would turn a bug into a silently degraded result.
+    /// </para>
     /// </remarks>
     public async Task<string> ResolveModelAsync(string? preferred, CancellationToken cancellationToken)
     {
@@ -184,10 +190,16 @@ public sealed partial class JevClient
                 return first.Name;
             }
         }
-        catch (JevException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            // Falling back is the better outcome here: the caller asked which model to use, not
-            // whether the listing endpoint is healthy.
+            // Falling back is the better outcome here: the caller asked which model to use, not whether
+            // the listing endpoint is healthy.
+            //
+            // The catch is deliberately wider than JevException. The transport is a documented
+            // substitution point, so a host-supplied implementation can throw its own exception type,
+            // and the whole point of this method is that a caller cannot be made to handle a failure of
+            // a listing it did not ask for. Cancellation is excluded because a caller that cancelled
+            // wants to know rather than silently receiving a default.
         }
 
         return string.IsNullOrWhiteSpace(preferred) ? _options.DefaultModel : preferred;
@@ -214,8 +226,11 @@ public sealed partial class JevClient
             await GetModelsAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
-        catch (JevException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            // Same reasoning as ResolveModelAsync: a substituted transport may throw its own type, and
+            // a host treating warmup as best-effort was told it would not need a try/catch. Cancellation
+            // still propagates, because a host that cancelled its own startup wants to know.
             return false;
         }
     }
