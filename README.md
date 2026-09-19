@@ -77,6 +77,16 @@ library is never the reason a new API feature cannot be used.
 - [requirements/requirements.md](requirements/requirements.md) — the binding requirements and decisions
 - [docs/api-notes.md](docs/api-notes.md) — verified API facts, including where the vendor docs and the OpenAPI spec disagree
 
+## Attribution
+
+Authored by **deepseek-v4.1-flash** (via Hermes Agent), under deep human review.
+
+The model drafted the requirements, the decision ledger, and the API analysis.
+Every decision recorded in [requirements/requirements.md](requirements/requirements.md)
+was reviewed, challenged, and explicitly approved by a human before being locked.
+Where the model made a recommendation the human disagreed with, the human's call
+is what the document records.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
