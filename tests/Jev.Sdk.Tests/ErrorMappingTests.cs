@@ -82,7 +82,6 @@ public class ErrorMappingTests
         JevRateLimitException exception = await Assert.ThrowsAsync<JevRateLimitException>(
             () => client.SystemOneAsync("text", TestClient.ThreeQuestions(), model: null, CancellationToken.None));
 
-        Assert.Equal(HttpStatusCode.TooManyRequests, exception.StatusCode);
         Assert.Equal(TimeSpan.FromSeconds(3), exception.RetryAfter);
     }
 

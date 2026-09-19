@@ -1,33 +1,32 @@
-// JevAuthenticationException.cs
+// JevNotFoundException.cs
 // Part of Jev.Sdk. This file is one of the partial-class/file set for error mapping.
 // See requirements/requirements.md, R7.
 //
-// Type: JevAuthenticationException
+// Type: JevNotFoundException
 
 using System.Net;
 
 namespace Jev.Sdk;
 
 /// <summary>
-/// The API rejected the request as unauthenticated: the key is missing, malformed, or no longer
-/// valid. HTTP 401.
+/// The requested resource does not exist. HTTP 404.
 /// </summary>
 /// <remarks>
-/// Never retried. Retrying cannot fix a credential, and doing so only wastes the caller's time.
+/// Never retried. A missing route or resource does not appear because it was asked for again.
 /// </remarks>
-public sealed class JevAuthenticationException : JevApiException
+public sealed class JevNotFoundException : JevApiException
 {
     /// <summary>Initialises an exception.</summary>
     /// <param name="message">The message.</param>
     /// <param name="responseBody">The raw response body, when one was read.</param>
     /// <param name="requestId">The server's request identifier, when present.</param>
     /// <param name="endpoint">The method and URL that failed, without credentials.</param>
-    public JevAuthenticationException(
+    public JevNotFoundException(
         string message,
         string? responseBody = null,
         string? requestId = null,
         string? endpoint = null)
-        : base(HttpStatusCode.Unauthorized, message, responseBody, requestId, endpoint)
+        : base(HttpStatusCode.NotFound, message, responseBody, requestId, endpoint)
     {
     }
 }

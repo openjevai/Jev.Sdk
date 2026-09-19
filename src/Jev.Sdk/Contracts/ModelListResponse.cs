@@ -11,7 +11,7 @@ namespace Jev.Sdk;
 /// <summary>
 /// The body returned by <c>GET /v1/models</c>.
 /// </summary>
-public sealed class ModelListResponse
+public sealed class ModelListResponse : JevResponse
 {
     /// <summary>Models and aliases available to the authenticated account.</summary>
     [JsonPropertyName("models")]

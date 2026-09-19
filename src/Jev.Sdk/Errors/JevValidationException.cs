@@ -21,10 +21,18 @@ public sealed class JevValidationException : JevApiException
     /// <param name="message">The message.</param>
     /// <param name="details">Per-field failures reported by the server.</param>
     /// <param name="responseBody">The raw response body, when one was read.</param>
-    public JevValidationException(string message, IReadOnlyList<ErrorDetails> details, string? responseBody = null)
-        : base(HttpStatusCode.UnprocessableEntity, message, responseBody)
+    /// <param name="requestId">The server's request identifier, when present.</param>
+    /// <param name="endpoint">The method and URL that failed, without credentials.</param>
+    public JevValidationException(
+        string message,
+        IReadOnlyList<ErrorDetails> details,
+        string? responseBody = null,
+        string? requestId = null,
+        string? endpoint = null)
+        : base(HttpStatusCode.UnprocessableEntity, message, responseBody, requestId, endpoint)
     {
-        Details = details ?? [];
+        ArgumentNullException.ThrowIfNull(details);
+        Details = details;
     }
 
     /// <summary>Per-field failures reported by the server. Never null.</summary>

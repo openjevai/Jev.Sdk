@@ -59,7 +59,9 @@ public static class JevServiceCollectionExtensions
     {
         IConfiguration? config = ResolveConfiguration(provider, configuration);
 
-        return config is null ? new JevClientOptions() : JevOptionsBinding.FromConfiguration(config);
+        return config is null
+            ? EnvironmentOptionsProvider.Apply(new JevClientOptions())
+            : JevOptionsBinding.FromConfiguration(config);
     }
 
     private static ChainedApiKeyProvider BuildApiKeyProvider(IServiceProvider provider, IConfiguration? configuration)

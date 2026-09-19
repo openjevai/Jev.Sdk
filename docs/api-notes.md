@@ -245,6 +245,64 @@ specification. In each case the specification wins.
 
 ---
 
+## 6a. Vendor throttling and restraint guidance
+
+The vendor's SDK documentation specifies throttling behaviour that a client should match, because
+a caller moving between the Python, JavaScript, and .NET clients should not get different
+behaviour against the same account. Verified from
+`docs.typesafe.ai/sdk/python/api/retries`, `/sdk/python/api/constants`,
+`/sdk/javascript/api/interfaces/RetryPolicy`, and `/sdk/python/api/exceptions`.
+
+**Retry policy defaults**
+
+| Setting | Value |
+| --- | --- |
+| `max_retries` | 2 after the initial attempt; 0 disables retrying |
+| `backoff_initial` | 0.5 s |
+| `backoff_max` | 5.0 s |
+| `backoff_jitter` | 0.25, subtracted from the delay rather than replacing it |
+| `http_statuses` | 408, 429, and 500-599 |
+| `respect_retry_after` | true |
+| `max_retry_after_ms` | 60000; a longer server delay falls back to the computed backoff |
+| API connection error | retried, including an interrupted response body |
+| API timeout error | retried |
+
+Note the retryable set carefully: it is **408, 429, and every 5xx**, not merely the 429 and 529
+the prose API reference mentions. Retrying only 429 and 529 would leave 500, 502, and 503
+un-retried, turning a transient server condition into a caller-visible failure.
+
+**Client defaults**
+
+| Setting | Value |
+| --- | --- |
+| Base URL | `https://api.typesafe.ai` |
+| Model | `jev-latest` |
+| Timeout | 10.0 s, per HTTP operation |
+| API key | `TYPESAFE_API_KEY` |
+| Base URL override | `TYPESAFE_BASE_URL` |
+| Model override | `TYPESAFE_DEFAULT_MODEL` |
+| Log level | `TYPESAFE_LOG_LEVEL` |
+
+**Request identifier**
+
+Responses carry an `x-typesafe-request-id` header, surfaced by the vendor's SDKs as `request_id`
+on both results and errors. It is the handle their support asks for, so a client that discards it
+leaves a caller unable to escalate a specific call. It is a bounded server-supplied identifier,
+which makes it safe to log and safe to attach to a span, unlike the caller's state.
+
+**Exception surface**
+
+`400`, `401`, `403`, `404`, `422`, `429`, and `5xx` each map to a distinct type, plus separate
+connection and timeout types. `429` is modelled as a rate limit rather than as a server error,
+because a caller acting on one wants to slow down, not to report an outage.
+
+**Logging**
+
+The vendor's SDKs log to the `typesafe_sdk` logger and redact secret headers, but explicitly note
+that **request and response bodies are not redacted**. That is a weaker position than this library
+takes: see section 7. Matching their throttle behaviour is worthwhile; matching their body-logging
+behaviour is not.
+
 ## 7. Client design consequences
 
 - **Model discovery is required**, not optional — it is the only documented way
@@ -263,7 +321,11 @@ specification. In each case the specification wins.
   confidence.
 - **The `state` value is sensitive by default.** It is caller content — support
   tickets, customer messages, possibly regulated data. Never logged, never a
-  metric tag, never attached to a span.
+  metric tag, never attached to a span. The vendor's SDKs redact secret headers
+  but not request or response bodies; this client does not log bodies at all.
+- **Match the vendor's throttling, but not their logging.** The retry defaults and
+  retryable status set are mirrored so behaviour is consistent across SDKs. The
+  body-logging behaviour is deliberately not mirrored.
 
 ---
 

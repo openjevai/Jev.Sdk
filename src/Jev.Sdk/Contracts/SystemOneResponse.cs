@@ -12,7 +12,7 @@ namespace Jev.Sdk;
 /// The body returned by <c>POST /v1/systemone</c>: one answer per question, the model that
 /// produced them, and token usage.
 /// </summary>
-public sealed class SystemOneResponse
+public sealed class SystemOneResponse : JevResponse
 {
     /// <summary>
     /// The model that answered. May differ from the alias supplied in the request, because an

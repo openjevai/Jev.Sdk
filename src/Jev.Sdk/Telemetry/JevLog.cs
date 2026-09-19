@@ -51,8 +51,8 @@ internal static partial class JevLog
     [LoggerMessage(
         EventId = 3000,
         Level = LogLevel.Error,
-        Message = "{Method} {Path} failed with status {StatusCode} after {Attempts} attempt(s).")]
-    internal static partial void RequestFailed(ILogger logger, string method, string path, int statusCode, int attempts);
+        Message = "{Method} {Path} failed with status {StatusCode} after {Attempts} attempt(s). Request id {RequestId}.")]
+    internal static partial void RequestFailed(ILogger logger, string method, string path, int statusCode, int attempts, string? requestId);
 
     [LoggerMessage(
         EventId = 3001,

@@ -1,33 +1,34 @@
-// JevAuthenticationException.cs
+// JevBadRequestException.cs
 // Part of Jev.Sdk. This file is one of the partial-class/file set for error mapping.
 // See requirements/requirements.md, R7.
 //
-// Type: JevAuthenticationException
+// Type: JevBadRequestException
 
 using System.Net;
 
 namespace Jev.Sdk;
 
 /// <summary>
-/// The API rejected the request as unauthenticated: the key is missing, malformed, or no longer
-/// valid. HTTP 401.
+/// The request was malformed. HTTP 400.
 /// </summary>
 /// <remarks>
-/// Never retried. Retrying cannot fix a credential, and doing so only wastes the caller's time.
+/// Distinct from <see cref="JevValidationException"/> (422): a 400 means the body could not be
+/// parsed as a request at all, while a 422 means it parsed but failed validation. Both are
+/// caller-side errors and neither is retried.
 /// </remarks>
-public sealed class JevAuthenticationException : JevApiException
+public sealed class JevBadRequestException : JevApiException
 {
     /// <summary>Initialises an exception.</summary>
     /// <param name="message">The message.</param>
     /// <param name="responseBody">The raw response body, when one was read.</param>
     /// <param name="requestId">The server's request identifier, when present.</param>
     /// <param name="endpoint">The method and URL that failed, without credentials.</param>
-    public JevAuthenticationException(
+    public JevBadRequestException(
         string message,
         string? responseBody = null,
         string? requestId = null,
         string? endpoint = null)
-        : base(HttpStatusCode.Unauthorized, message, responseBody, requestId, endpoint)
+        : base(HttpStatusCode.BadRequest, message, responseBody, requestId, endpoint)
     {
     }
 }

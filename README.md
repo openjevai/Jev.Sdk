@@ -155,12 +155,26 @@ Every error this library raises derives from `JevException`, so one catch covers
 | --- | --- |
 | `JevConfigurationException` | no API key could be resolved, or an option value is invalid |
 | `JevRequestValidationException` | the request is locally invalid; no network call is made |
+| `JevBadRequestException` | HTTP 400 — the request was malformed |
 | `JevAuthenticationException` | HTTP 401 — the key is missing or invalid |
+| `JevPermissionDeniedException` | HTTP 403 — the key is valid but not permitted |
+| `JevNotFoundException` | HTTP 404 |
 | `JevValidationException` | HTTP 422 — the API rejected the body; carries per-field details |
 | `JevRateLimitException` | HTTP 429, after retries are exhausted; carries `Retry-After` |
-| `JevOverloadedException` | HTTP 529, after retries are exhausted |
+| `JevServerException` | any 5xx, after retries are exhausted |
+| `JevOverloadedException` | HTTP 529 specifically; derives from `JevServerException` |
 | `JevApiException` | any other status |
 | `JevConnectionException` | the exchange failed, or the response was unreadable |
+
+`JevOverloadedException` derives from `JevServerException`, so one catch covers every server-side
+condition. `JevRateLimitException` deliberately does not: a rate limit is the server declining to
+serve rather than failing, and collapsing the two would make you report an outage when you should
+slow down.
+
+Every API exception carries `RequestId` (from the `x-typesafe-request-id` response header) and
+`Endpoint`. Success responses carry `RequestId` too, via `JevResponse.RequestId` — logging a
+successful call needs the same handle as reporting a failed one. Quote it when escalating to
+TypeSafe support, since it is how they find the call.
 
 ```csharp
 try
@@ -184,11 +198,34 @@ Local validation runs before any network call and reports every problem at once,
 costs one round of feedback rather than several. A Score question with a single level is rejected
 even though the API accepts it, because a one-level scale returns a constant.
 
-## Retries
+## Throttling and retries
 
-429, 529, and transport failures are retried with exponential backoff and jitter, bounded by
-`MaxRetries`, and honouring `Retry-After` when the server sends one. 401 and 422 are never
-retried: repeating them cannot change the answer.
+The defaults match TypeSafe's own SDKs, so a machine running the Python or JavaScript client
+throttles the same way this one does:
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `MaxRetries` | 2 | after the initial attempt; 0 disables retrying |
+| `InitialRetryDelay` | 500 ms | doubled each attempt |
+| `MaxRetryDelay` | 5 s | ceiling on the computed backoff |
+| `MaxRetryAfter` | 60 s | ceiling on a server-supplied delay |
+| `RetryJitterFraction` | 0.25 | subtractive jitter |
+| `Timeout` | 10 s | per attempt, not a whole-call deadline |
+
+**Retryable statuses are 408, 429, and every 5xx.** TypeSafe's documented `529 Overloaded` is
+covered by the 5xx range — retrying only 429 and 529 would leave a 500, 502, or 503 un-retried,
+and that is how a transient outage becomes your user's outage. Nothing in the 4xx range is
+retried: 400, 401, 403, 404, and 422 cannot be improved by repetition.
+
+Jitter here is **subtractive**: each computed delay is reduced by up to a quarter, so a
+1-second backoff lands between 750 ms and 1 s. It is deliberately not "full jitter", which
+replaces the delay with a uniform random value from zero — that would shorten waits far more than
+the vendor's SDKs do.
+
+A server-supplied `Retry-After` or `retry-after-ms` takes precedence over the computed backoff.
+The millisecond form wins when both are present, being more precise. A server delay beyond
+`MaxRetryAfter` is discarded and the computed backoff used instead: waiting minutes inside one
+call is worse than failing and letting you retry at your own level.
 
 ```csharp
 using var client = new JevClient(new JevClientOptions
@@ -196,6 +233,7 @@ using var client = new JevClient(new JevClientOptions
     MaxRetries = 5,
     InitialRetryDelay = TimeSpan.FromMilliseconds(250),
     MaxRetryDelay = TimeSpan.FromSeconds(10),
+    MaxRetryAfter = TimeSpan.FromMinutes(2),
 });
 ```
 
@@ -221,6 +259,16 @@ token comes from the `MACHINE_NAME` environment variable when set, falling back 
 `Environment.MachineName` — the override matters in containers, where the machine name is a
 random id that changes when the container is recreated. Files are read once, at host startup, and
 never watched, because the core library performs no file I/O.
+
+Two further variables are read, matching the vendor's SDKs:
+
+| Variable | Effect |
+| --- | --- |
+| `TYPESAFE_BASE_URL` | overrides the default base address |
+| `TYPESAFE_DEFAULT_MODEL` | overrides the default model |
+
+These supply defaults only. A value set explicitly in code is never overridden by the
+environment.
 
 Every seam is an interface with a working default, and registration uses `TryAdd`, so anything
 you register first wins:

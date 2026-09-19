@@ -4,13 +4,14 @@
 //
 // Type: JevClient
 //
-// The shared pipeline: send, retry retryable failures, map status codes to exceptions, and
-// emit telemetry. Everything that both endpoints do in common lives here, so retry behaviour
-// and error mapping are defined once and cannot drift between endpoints.
+// The shared pipeline: send, retry retryable failures, map status codes to exceptions, and emit
+// telemetry. Everything that both endpoints do in common lives here, so retry behaviour and error
+// mapping are defined once and cannot drift between endpoints.
 //
-// The caller's state never appears in a log message, a span tag, or a metric tag, at any
-// level. What is recorded is shape and outcome: the model, how many questions, the status, the
-// retry count, and the token counts the API reports.
+// The caller's state never appears in a log message, a span tag, or a metric tag, at any level.
+// What is recorded is shape and outcome: the model, how many questions, the status, the retry
+// count, the token counts the API reports, and the server's request id. The request id is safe to
+// record because it is a bounded, server-supplied identifier rather than caller content.
 
 using System.Diagnostics;
 using System.Net;
@@ -74,15 +75,22 @@ public sealed partial class JevClient
                 catch (JevConnectionException) when (retriesPerformed < _options.MaxRetries)
                 {
                     // A transport failure is usually transient, so it is retried with the same
-                    // backoff as a rate limit.
+                    // backoff as a server-side status.
                     retriesPerformed++;
                     TimeSpan delay = HttpTypeSafeTransport.ComputeRetryDelay(
                         retriesPerformed - 1, retryAfter: null, _options, _jitterSource);
 
                     JevLog.RetryingAfterTransportFailure(
-                        _logger, method.Method, relativePath, retriesPerformed, _options.MaxRetries, (long)delay.TotalMilliseconds);
+                        _logger,
+                        method.Method,
+                        relativePath,
+                        retriesPerformed,
+                        _options.MaxRetries,
+                        (long)delay.TotalMilliseconds);
 
-                    JevTelemetry.Retries.Add(1, new KeyValuePair<string, object?>(JevTelemetry.StatusCodeTag, 0));
+                    JevTelemetry.Retries.Add(
+                        1,
+                        new KeyValuePair<string, object?>(JevTelemetry.StatusCodeTag, 0));
 
                     await Task.Delay(delay, _timeProvider, cancellationToken).ConfigureAwait(false);
                     continue;
@@ -93,7 +101,8 @@ public sealed partial class JevClient
                     break;
                 }
 
-                if (HttpTypeSafeTransport.IsRetryableStatus(lastResponse.StatusCode) && retriesPerformed < _options.MaxRetries)
+                if (HttpTypeSafeTransport.IsRetryableStatus(lastResponse.StatusCode)
+                    && retriesPerformed < _options.MaxRetries)
                 {
                     retriesPerformed++;
                     TimeSpan delay = HttpTypeSafeTransport.ComputeRetryDelay(
@@ -108,7 +117,9 @@ public sealed partial class JevClient
                         _options.MaxRetries,
                         (long)delay.TotalMilliseconds);
 
-                    JevTelemetry.Retries.Add(1, new KeyValuePair<string, object?>(JevTelemetry.StatusCodeTag, (int)lastResponse.StatusCode));
+                    JevTelemetry.Retries.Add(
+                        1,
+                        new KeyValuePair<string, object?>(JevTelemetry.StatusCodeTag, (int)lastResponse.StatusCode));
 
                     activity?.AddEvent(new ActivityEvent(
                         "retry",
@@ -135,6 +146,13 @@ public sealed partial class JevClient
             {
                 activity.SetTag(JevTelemetry.StatusCodeTag, (int)finalResponse.StatusCode);
                 activity.SetTag(JevTelemetry.RetryCountTag, retriesPerformed);
+
+                // The request id is a server-supplied identifier, so it is safe on a span and it is
+                // the one thing that lets an operator find this exact call in TypeSafe's own logs.
+                if (finalResponse.RequestId is { Length: > 0 } requestId)
+                {
+                    activity.SetTag(JevTelemetry.RequestIdTag, requestId);
+                }
             }
 
             JevLog.RequestCompleted(
@@ -146,6 +164,13 @@ public sealed partial class JevClient
                 method,
                 relativePath,
                 retriesPerformed + 1);
+
+            // The request id is attached to the materialised result, so a caller that logs a
+            // successful call has the handle for it too.
+            if (result is JevResponse jeevResponse && finalResponse.RequestId is { Length: > 0 } successRequestId)
+            {
+                jeevResponse.RequestId = successRequestId;
+            }
 
             if (isSystemOne && result is SystemOneResponse systemOne && systemOne.Usage is { } usage)
             {
@@ -169,9 +194,9 @@ public sealed partial class JevClient
         }
         finally
         {
-            // A cancelled or failed call is still a call, and recording it is what makes a
-            // failure or cancellation rate visible rather than invisible. The flag is set only
-            // on the success path, so this runs exactly once per call either way.
+            // A cancelled or failed call is still a call, and recording it is what makes a failure
+            // or cancellation rate visible rather than invisible. The flag is set only on the
+            // success path, so this runs exactly once per call either way.
             if (!recordedOutcome)
             {
                 string outcome = cancellationToken.IsCancellationRequested ? "cancelled" : "error";
@@ -203,8 +228,8 @@ public sealed partial class JevClient
 
         if (response.Body is null || response.Body.Length == 0)
         {
-            // Only a 200 with a body is meaningful here. An empty success body means the
-            // contract was not honoured.
+            // Only a 200 with a body is meaningful here. An empty success body means the contract
+            // was not honoured.
             throw new JevConnectionException(
                 $"{method.Method} {relativePath} returned {response.StatusCode} with an empty body.",
                 isProtocolError: true);
@@ -217,7 +242,8 @@ public sealed partial class JevClient
             return parsed ?? throw new JevConnectionException(
                 $"{method.Method} {relativePath} returned a null body where an object was expected.",
                 isProtocolError: true,
-                responseBody: response.BodyAsText);
+                responseBody: response.BodyAsText,
+                requestId: response.RequestId);
         }
         catch (JsonException exception)
         {
@@ -228,7 +254,8 @@ public sealed partial class JevClient
                 $"{method.Method} {relativePath} returned a body that could not be read as JSON.",
                 exception,
                 isProtocolError: true,
-                responseBody: response.BodyAsText);
+                responseBody: response.BodyAsText,
+                requestId: response.RequestId);
         }
     }
 
@@ -239,36 +266,52 @@ public sealed partial class JevClient
         int attempts)
     {
         string? body = response.BodyAsText;
+        string? requestId = response.RequestId;
+        string endpoint = $"{method.Method} {relativePath}";
         int statusCode = (int)response.StatusCode;
-        string summary = $"{method.Method} {relativePath} returned {statusCode}";
 
-        JevLog.RequestFailed(_logger, method.Method, relativePath, statusCode, attempts);
+        JevLog.RequestFailed(_logger, method.Method, relativePath, statusCode, attempts, requestId);
 
         return response.StatusCode switch
         {
+            HttpStatusCode.BadRequest => new JevBadRequestException(
+                $"{endpoint} returned 400: the request was malformed.",
+                body, requestId, endpoint),
+
             HttpStatusCode.Unauthorized => new JevAuthenticationException(
-                $"{summary}: the API key is missing or invalid.",
-                body),
+                $"{endpoint} returned 401: the API key is missing or invalid.",
+                body, requestId, endpoint),
+
+            HttpStatusCode.Forbidden => new JevPermissionDeniedException(
+                $"{endpoint} returned 403: the credential is valid but not permitted for this request.",
+                body, requestId, endpoint),
+
+            HttpStatusCode.NotFound => new JevNotFoundException(
+                $"{endpoint} returned 404: the resource does not exist.",
+                body, requestId, endpoint),
 
             HttpStatusCode.UnprocessableEntity => new JevValidationException(
-                $"{summary}: the API rejected the request body.",
+                $"{endpoint} returned 422: the API rejected the request body.",
                 ReadValidationDetails(body),
-                body),
+                body, requestId, endpoint),
 
             HttpStatusCode.TooManyRequests => new JevRateLimitException(
-                $"{summary}: the rate limit is in force. Retries were exhausted.",
-                response.RetryAfter,
-                body),
+                $"{endpoint} returned 429: the rate limit is in force. Retries were exhausted.",
+                response.RetryAfter, body, requestId, endpoint),
 
-            _ when statusCode == 529 => new JevOverloadedException(
-                $"{summary}: TypeSafe is overloaded. Retries were exhausted.",
-                response.RetryAfter,
-                body),
+            _ when statusCode == HttpTypeSafeTransport.OverloadedStatusCode => new JevOverloadedException(
+                $"{endpoint} returned 529: TypeSafe is overloaded. Retries were exhausted.",
+                response.RetryAfter, body, requestId, endpoint),
+
+            _ when statusCode is >= 500 and <= 599 => new JevServerException(
+                response.StatusCode,
+                $"{endpoint} returned {statusCode}: the server failed to process the request. Retries were exhausted.",
+                body, response.RetryAfter, requestId, endpoint),
 
             _ => new JevApiException(
                 response.StatusCode,
-                $"{summary}: {response.StatusCode}.",
-                body),
+                $"{endpoint} returned {statusCode}: {response.StatusCode}.",
+                body, requestId, endpoint),
         };
     }
 

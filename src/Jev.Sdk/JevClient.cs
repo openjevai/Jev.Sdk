@@ -98,7 +98,11 @@ public sealed partial class JevClient : IDisposable
         TimeProvider timeProvider,
         Func<double>? jitterSource)
     {
-        _options = (options ?? new JevClientOptions()).Snapshot();
+        // When the caller supplies no options at all, the environment fills in the base address and
+        // default model, matching what the vendor's SDKs read. An explicitly supplied options object
+        // is left alone: the environment supplies defaults, it does not override a decision made in
+        // code.
+        _options = (options ?? EnvironmentOptionsProvider.Apply(new JevClientOptions())).Snapshot();
 
         // The serialization context is built once, here, and never mutated afterwards.
         _jsonContext = JevJson.CreateContext(_options.ConfigureJson);

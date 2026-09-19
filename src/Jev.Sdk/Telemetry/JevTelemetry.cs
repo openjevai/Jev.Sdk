@@ -51,6 +51,12 @@ public static class JevTelemetry
     /// <summary>Tag holding the output tokens reported for a call.</summary>
     public const string OutputTokensTag = "jev.tokens.output";
 
+    /// <summary>
+    /// Tag holding the server's request identifier for a call. Safe to record: it is a bounded,
+    /// server-supplied identifier, unlike the caller's state.
+    /// </summary>
+    public const string RequestIdTag = "jev.request_id";
+
     /// <summary>Counter of completed calls, tagged by outcome.</summary>
     public const string CallsInstrumentName = "jev.calls";
 

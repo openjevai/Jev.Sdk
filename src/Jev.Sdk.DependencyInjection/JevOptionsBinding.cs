@@ -30,6 +30,10 @@ public static class JevOptionsBinding
         IConfigurationSection section = configuration.GetSection(JevEnvironment.ConfigurationSection);
         JevClientOptions options = new();
 
+        // Environment variables supply the defaults for anything the section does not set, matching
+        // what the vendor's SDKs read. The section wins where it has a value.
+        EnvironmentOptionsProvider.Apply(options);
+
         if (!string.IsNullOrWhiteSpace(apiKey))
         {
             options.ApiKey = apiKey;

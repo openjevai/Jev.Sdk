@@ -46,8 +46,10 @@ BRANCH_FLOORS = {
 # documented behaviour. Each entry needs a reason, and a reason that would survive review.
 EXEMPT_LINES = {
     "Jev.Sdk/Http/HttpTypeSafeTransport.cs": {
-        110: "HttpClient always supplies a non-null Content on a response; this null check is a guard against that changing.",
-        150: "RetryConditionHeaderValue permits both members to be null, but no code path produces such a header.",
+        115: "HttpClient always supplies a non-null Content on a response; this null check guards against that changing.",
+    },
+    "Jev.Sdk/Http/HttpTypeSafeTransport.Retry.cs": {
+        167: "RetryConditionHeaderValue permits both members to be null, but no code path produces such a header.",
     },
     "Jev.Sdk/Questions/StructuredValue.cs": {
         132: "Serializing a non-null value never yields JsonValueKind.Undefined, so the default arm is unreachable.",

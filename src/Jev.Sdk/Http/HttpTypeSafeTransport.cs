@@ -99,7 +99,12 @@ public sealed partial class HttpTypeSafeTransport : ITypeSafeTransport, IDisposa
             return new TransportResponse(
                 response.StatusCode,
                 body,
-                ParseRetryAfter(response.Headers.RetryAfter));
+                ParseRetryHeaders(
+                    response.Headers.RetryAfter,
+                    response.Headers.TryGetValues("retry-after-ms", out IEnumerable<string>? msValues)
+                        ? msValues.FirstOrDefault()
+                        : null),
+                JevRequestId.FromHeaders(response.Headers));
         }
     }
 
@@ -124,30 +129,6 @@ public sealed partial class HttpTypeSafeTransport : ITypeSafeTransport, IDisposa
                 "The response body could not be read.",
                 exception);
         }
-    }
-
-    /// <summary>
-    /// Parses the <c>Retry-After</c> header. Returns null when it is absent or unparseable.
-    /// </summary>
-    internal static TimeSpan? ParseRetryAfter(RetryConditionHeaderValue? retryAfter)
-    {
-        if (retryAfter is null)
-        {
-            return null;
-        }
-
-        if (retryAfter.Delta is { } delta)
-        {
-            return delta < TimeSpan.Zero ? TimeSpan.Zero : delta;
-        }
-
-        if (retryAfter.Date is { } date)
-        {
-            TimeSpan until = date - DateTimeOffset.UtcNow;
-            return until < TimeSpan.Zero ? TimeSpan.Zero : until;
-        }
-
-        return null;
     }
 
     /// <inheritdoc />

@@ -100,11 +100,52 @@ other answers in the same payload.
 A malformed or unparseable response body is a protocol error, distinct from a
 422 validation failure.
 
+Statuses map to these types, matching the vendor's exception surface:
+
+| Status | Type |
+| --- | --- |
+| 400 | `JevBadRequestException` |
+| 401 | `JevAuthenticationException` |
+| 403 | `JevPermissionDeniedException` |
+| 404 | `JevNotFoundException` |
+| 422 | `JevValidationException`, with per-field details |
+| 429 | `JevRateLimitException`, with `RetryAfter` |
+| 5xx | `JevServerException`; 529 additionally as `JevOverloadedException`, which derives from it |
+| transport / timeout | `JevConnectionException` |
+
+`JevOverloadedException` derives from `JevServerException`, so one catch covers
+every server-side condition. `JevRateLimitException` deliberately does **not**:
+a rate limit is the server declining to serve rather than failing, and collapsing
+the two would make a caller report an outage when it should slow down.
+
+Every API exception carries `RequestId`, from the `x-typesafe-request-id`
+response header, and `Endpoint`, the method and URL without credentials. The
+request id is also attached to successful responses via `JevResponse.RequestId`,
+because a caller logging a success needs the same handle as one reporting a
+failure. It is a bounded server-supplied identifier, so unlike caller content it
+is safe to log and safe to attach to a span.
+
 ### R8 — Retries
 
-429 and 529 are retried with exponential backoff and jitter, bounded by an
-attempt cap, honouring `Retry-After` when present. 401 and 422 are never retried.
-Retry delay must be cancellable.
+Retryable statuses are **408, 429, and every 5xx**. TypeSafe's documented 529
+(Overloaded) is covered by the 5xx range rather than named separately; retrying
+only 429 and 529 would have left 500, 502, and 503 un-retried, which is how a
+transient outage becomes a caller-visible failure. A 4xx is never retried: 400,
+401, 403, 404, and 422 cannot be improved by repetition.
+
+Backoff is exponential from `InitialRetryDelay`, bounded by `MaxRetryDelay`,
+with **subtractive** jitter: each computed delay is reduced by a random fraction
+no greater than `RetryJitterFraction`. This is deliberately not "full jitter",
+which replaces the delay with a uniform random value from zero.
+
+A server-supplied `Retry-After` or `retry-after-ms` takes precedence over the
+computed backoff, and is bounded by `MaxRetryAfter`. A server delay longer than
+that is discarded and the computed backoff used instead, because a caller
+waiting minutes inside one call would rather fail and retry at its own level.
+
+Retry delay must be cancellable. Defaults match the vendor's SDKs so that a
+caller moving between the Python, JavaScript, and .NET clients gets the same
+throttling behaviour.
 
 ### R9 — Client-side validation
 
@@ -122,6 +163,17 @@ API key resolution, highest priority first:
 4. `appSettings.json`.
 5. None present → configuration exception at construction, naming the sources checked.
 
+Two further environment variables are honoured, matching the vendor's SDKs so a
+machine already configured for the Python or JavaScript client needs no change:
+
+| Variable | Effect |
+| --- | --- |
+| `TYPESAFE_BASE_URL` | Overrides the default base address |
+| `TYPESAFE_DEFAULT_MODEL` | Overrides the default model |
+
+These supply defaults only. A value set explicitly in code is never overridden by
+the environment.
+
 Environment beats every file. Machine-specific beats generic. If a file is used,
 it is read once at host startup and never watched for changes.
 
@@ -134,6 +186,11 @@ The library emits BCL telemetry only:
   counts, status, retry count, and token usage.
 - `Meter` — call counts by outcome, retry counts, call duration, and token
   consumption.
+
+The server's request id is attached to the span as `jev.request_id`, because it
+is the one value that lets an operator find a specific call in TypeSafe's own
+logs. It is a bounded server-supplied identifier, so unlike caller state it is
+safe to record.
 
 No dependency on OpenTelemetry or any exporter. No public event or subscription
 surface.
@@ -245,6 +302,8 @@ non-breaking; removing one would not be.
 | D16 | Test framework: xunit (latest v3 line), pending a package-set verification probe |
 | D17 | Licence: MIT |
 | D18 | Repository is local-only. Nothing is written to the Obsidian vault |
+| D19 | Throttling defaults match the vendor's SDKs: 2 retries, 500 ms initial backoff, 5 s backoff ceiling, 60 s Retry-After ceiling, 0.25 subtractive jitter, 10 s per-attempt timeout, retryable set 408/429/5xx |
+| D20 | The vendor's exception surface and request-id are mirrored: distinct types per status, `RequestId` and `Endpoint` on every API exception, and `RequestId` on successful responses |
 
 ---
 

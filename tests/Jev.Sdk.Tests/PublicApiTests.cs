@@ -335,12 +335,13 @@ public class PublicApiTests
 
         Assert.Equal("https://api.typesafe.ai/v1/", options.BaseAddress.AbsoluteUri);
         Assert.Equal("jev-latest", options.DefaultModel);
-        Assert.Equal(3, options.MaxRetries);
-        Assert.Equal(100, options.Timeout.TotalSeconds);
+        Assert.Equal(2, options.MaxRetries);
+        Assert.Equal(10, options.Timeout.TotalSeconds);
         Assert.Equal(500, options.InitialRetryDelay.TotalMilliseconds);
         Assert.Equal(2.0, options.RetryBackoffMultiplier);
-        Assert.Equal(30, options.MaxRetryDelay.TotalSeconds);
-        Assert.True(options.UseRetryJitter);
+        Assert.Equal(5, options.MaxRetryDelay.TotalSeconds);
+        Assert.Equal(60, options.MaxRetryAfter.TotalSeconds);
+        Assert.Equal(0.25, options.RetryJitterFraction);
         Assert.True(options.ValidateRequests);
         Assert.Null(options.ConfigureJson);
         Assert.Null(options.ApiKey);
@@ -411,7 +412,7 @@ public class PublicApiTests
         Assert.Equal("jev-latest", fromKey.DefaultModel);
         Assert.Equal("jev-latest", fromOptions.DefaultModel);
         Assert.Equal("jev-latest", defaults.DefaultModel);
-        Assert.Equal(3, defaults.MaxRetries);
+        Assert.Equal(2, defaults.MaxRetries);
     }
 
     [Fact]

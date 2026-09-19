@@ -31,7 +31,8 @@ internal static class TestClient
             MaxRetries = 3,
             InitialRetryDelay = TimeSpan.Zero,
             MaxRetryDelay = TimeSpan.Zero,
-            UseRetryJitter = false,
+            MaxRetryAfter = TimeSpan.Zero,
+            RetryJitterFraction = 0,
         };
 
         configure?.Invoke(options);
