@@ -38,6 +38,9 @@ jobs:
              --collect:"XPlat Code Coverage"
              --results-directory ./artifacts/test-results
 
+      - name: Check coverage floors
+        run: python3 eng/coverage_gate.py './artifacts/test-results/**/coverage.cobertura.xml'
+
       - name: Pack
         run: dotnet pack Jev.Sdk.slnx --configuration Release --no-build
              --output ./artifacts/packages

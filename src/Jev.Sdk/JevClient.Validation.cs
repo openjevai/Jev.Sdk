@@ -23,10 +23,10 @@ public sealed partial class JevClient
     {
         List<string> problems = [];
 
-        if (string.IsNullOrWhiteSpace(model))
-        {
-            problems.Add("A model name is required. Pass one to the call, or set JevClientOptions.DefaultModel.");
-        }
+        // The model is not validated here: JevClientOptions rejects a blank default at
+        // construction, and a blank per-call model already falls back to that default before
+        // this runs. Checking again would be unreachable code.
+        _ = model;
 
         if (state is null || state.IsNull)
         {

@@ -116,4 +116,14 @@ public abstract class Question
     /// <returns>A question to place in a request's question map.</returns>
     public static NoulQuestion Noul(string instructions) =>
         new() { Instructions = StructuredValue.FromString(instructions) };
+
+    /// <summary>
+    /// Creates a Noul question from instructions that may be absent. Passing null produces a
+    /// question whose instructions are a JSON null, which local validation rejects later; the
+    /// factory itself does not throw, so a caller may build a question incrementally.
+    /// </summary>
+    /// <param name="instructions">The instructions, or null.</param>
+    /// <returns>A question to place in a request's question map.</returns>
+    public static NoulQuestion Noul(StructuredValue? instructions) =>
+        new() { Instructions = instructions ?? StructuredValue.Null };
 }
