@@ -327,7 +327,7 @@ public class HttpTransportTests
         System.Net.Http.HttpClient httpClient = new(handler, disposeHandler: false);
         using HttpTypeSafeTransport transport = new(httpClient, new StaticApiKeyProvider("k"), TimeSpan.FromSeconds(42));
 
-        Assert.Equal(TimeSpan.FromSeconds(42), transport.HttpClient.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(42), transport.Timeout);
     }
 
     [Fact]

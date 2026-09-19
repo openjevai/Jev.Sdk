@@ -254,6 +254,38 @@ The DI package is a convenience layer, not the only route.
 
 ## 4. Cross-Cutting Requirements
 
+### R12a — Timeouts
+
+The per-attempt timeout is enforced by the client, not by mutating an
+`HttpClient` the caller owns.
+
+`HttpClient.Timeout` cannot be assigned once the client has started a request. A
+pooled, singleton, or factory-managed client is a normal thing for a caller to
+supply — it is what `IHttpClientFactory` hands back — so assigning that property in
+the transport constructor would throw `InvalidOperationException` on any client that
+had already served a request. This was a real defect, found by probing rather than
+by reading.
+
+Instead each attempt runs under a linked `CancellationTokenSource` with its own
+deadline. That gives four properties, each of which is asserted by a test against
+observed wall-clock behaviour rather than against configuration:
+
+1. The deadline fires. Setting a value nothing reads is the classic version of this
+   bug.
+2. It is **per attempt**, not a whole-call budget. Three retries of two seconds each
+   is a six-second call.
+3. The caller's cancellation stays distinguishable from a timeout. A caller that
+   cancelled must not be told it hit a network failure, and vice versa.
+4. A caller-supplied `HttpClient` is never mutated, so its own timeout is left alone
+   and an already-used client is accepted.
+
+The body read is bounded by the same deadline. With `ResponseHeadersRead` the send
+returns as soon as headers arrive, so a server that sends headers promptly and then
+stalls the body would otherwise hold the call open past the configured timeout.
+
+A zero or negative timeout means no per-attempt deadline, leaving the client's own
+timeout in effect, rather than a token that cancels immediately and fails every call.
+
 ### R13 — Asynchronous I/O only
 
 - Every public I/O method returns `Task<T>` and accepts a `CancellationToken`.
@@ -348,6 +380,7 @@ non-breaking; removing one would not be.
 | D21 | The full declared type footprint is supported: every permissive `string \| object \| array \| null` member, the map-of-permissive Choice criteria, the array-of-permissive Score levels, the mixed string-or-integer error path, and caller-supplied request headers |
 | D22 | Unmodelled fields are reachable in both directions on every wire model, matching the vendor's `extra_body` escape hatch on the request and exceeding their skip-and-warn behaviour on unknown answer kinds |
 | D23 | No model enum. The model set is open, the default is the `jev-latest` alias, and repeated availability questions are served by a lazily populated per-client cache that never fetches at construction and never shares across accounts |
+| D24 | The per-attempt timeout is enforced with a linked cancellation token rather than by assigning `HttpClient.Timeout`, because that property is immutable once a client has served a request and callers legitimately pass pooled or factory-managed clients |
 
 ---
 

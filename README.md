@@ -270,6 +270,16 @@ throttles the same way this one does:
 | `RetryJitterFraction` | 0.25 | subtractive jitter |
 | `Timeout` | 10 s | per attempt, not a whole-call deadline |
 
+The timeout is enforced by the client with its own deadline rather than by mutating your
+`HttpClient`. That matters if you pass a pooled, singleton, or factory-managed client:
+`HttpClient.Timeout` cannot be assigned once the client has served a request, so a library that
+sets it would fail on exactly the clients you are most likely to hand it. Yours is left untouched,
+and an already-used client is accepted.
+
+The body read is bounded too, so a server that returns headers promptly and then stalls the body
+cannot hold a call open past the timeout. Cancelling your own `CancellationToken` still surfaces as
+a cancellation, not as a timeout, and vice versa.
+
 **Retryable statuses are 408, 429, and every 5xx.** TypeSafe's documented `529 Overloaded` is
 covered by the 5xx range — retrying only 429 and 529 would leave a 500, 502, or 503 un-retried,
 and that is how a transient outage becomes your user's outage. Nothing in the 4xx range is
