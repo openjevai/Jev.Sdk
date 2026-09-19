@@ -135,15 +135,73 @@ await client.SystemOneAsync(
 
 ## Model discovery
 
-`GET /v1/models` is defined in the OpenAPI specification but absent from the prose reference. It
-is the only way to learn which models your account can use, so the client implements it:
+`GET /v1/models` is defined in the OpenAPI specification but absent from the prose reference. It is
+the only way to learn which models your account can use, so the client implements it.
+
+The model set is **open** — the API can add models at any time — so there is deliberately no enum.
+Both of the vendor's SDKs type the model as a plain string for the same reason. The default is
+`jev-latest`, which is their alias for the current flagship and resolves server-side, so a caller
+gets a sensible model without naming one and it never goes stale.
 
 ```csharp
+// Always a fresh request.
 IReadOnlyList<ModelMetadata> models = await client.GetModelsAsync(cancellationToken);
+```
 
-foreach (ModelMetadata model in models)
+### Cached reads
+
+Asking "is model X available?" or "pick the best model" rarely needs a live answer, so there is a
+lazily populated per-client cache:
+
+```csharp
+// First call fetches; later calls are served from the cache.
+IReadOnlyList<ModelMetadata> models = await client.GetAvailableModelsAsync(cancellationToken);
+
+if (await client.IsModelAvailableAsync("jev-2026-08", cancellationToken)) { /* ... */ }
+
+string model = await client.ResolveModelAsync(preferred: null, cancellationToken);
+```
+
+Three properties are deliberate:
+
+- **Nothing is fetched at construction.** `new JevClient()` performs no I/O and cannot fail on a
+  network problem, a bad key, or a rate limit — in a place where you have no way to handle it.
+- **The cache is per client, not process-wide.** `/v1/models` returns the models available to *your
+  account*, so a shared cache would serve one account's list to another.
+- **Concurrent first reads share one request.** Twenty callers asking at once produce one call, not
+  twenty.
+
+The cache lives for an hour by default; tune or disable it with `ModelCacheDuration`:
+
+```csharp
+new JevClientOptions { ModelCacheDuration = TimeSpan.FromMinutes(15) };  // shorter TTL
+new JevClientOptions { ModelCacheDuration = TimeSpan.Zero };             // no caching
+```
+
+Invalidate it yourself when you know the server-side list changed:
+
+```csharp
+client.InvalidateModelCache();
+```
+
+### Warming the cache at startup
+
+If your first request matters more than startup latency — a service whose first user should not pay
+for a discovery call — warm it explicitly, where you can await and handle failure:
+
+```csharp
+using Jev.Sdk.DependencyInjection;
+
+bool warmed = await JevClientWarmup.WarmAsync(client, logger, cancellationToken);
+```
+
+Or straight on the client, which reports failure as `false` rather than throwing, so best-effort
+warmup needs no try/catch:
+
+```csharp
+if (!await client.WarmModelsAsync(cancellationToken))
 {
-    Console.WriteLine($"{model.Name} ({model.ParsedReleaseDate:yyyy-MM-dd}): {model.Description}");
+    // Not fatal: the client will fetch on first use.
 }
 ```
 
@@ -353,6 +411,8 @@ if (response["sentiment"] is UnknownAnswer unknown)
 - No file I/O in the core library. File-based configuration is loaded by the DI package at host
   startup, never inside a client constructor.
 - No public event or subscription surface. Telemetry covers in-process observation.
+- No network I/O at construction. Nothing is fetched until you call something, so building a client
+  is infallible and instant.
 
 ## Repository layout
 

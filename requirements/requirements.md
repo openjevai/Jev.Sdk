@@ -55,9 +55,35 @@ question keys.
 
 ### R2 — Model discovery
 
-The client exposes model listing so callers can discover available model names
-and aliases rather than hardcoding `jev-latest`. Returns model name, description,
-and release date.
+The client exposes model listing so callers can discover available model names and
+aliases rather than hardcoding `jev-latest`. Returns model name, description, and
+release date.
+
+There is deliberately no model enum. The set is open — the API can add models at
+any time — and both vendor SDKs type the model as a plain string. An enum would
+model a closed set and would fail on a new model without a new library version.
+The default remains `jev-latest`, the vendor's alias for their current flagship,
+which resolves server-side and therefore cannot go stale.
+
+A lazily populated, per-client cache serves repeated availability questions without
+a request each. Three constraints shape it:
+
+1. Nothing is fetched at construction. The constructor performs no I/O and cannot
+   fail on a network problem, a bad key, or a rate limit, in a place a caller has
+   no way to handle.
+2. The cache is scoped to one client. `/v1/models` returns the models available to
+   the authenticated account, so a process-wide cache would serve one account's
+   model list to another.
+3. Concurrent first reads share a single request, so a service that fans out on
+   startup does not issue one request per caller.
+
+The cache has a configurable lifetime (default one hour, zero disables it), can be
+invalidated explicitly, and a failed refresh propagates without discarding a
+previously good list.
+
+Warming at startup is opt-in rather than automatic. A host that wants it calls
+`WarmModelsAsync`, or `JevClientWarmup.WarmAsync` from the DI package, at its own
+startup where it can await and handle failure. The client never does it itself.
 
 ### R3 — Question types
 
@@ -321,6 +347,7 @@ non-breaking; removing one would not be.
 | D20 | The vendor's exception surface and request-id are mirrored: distinct types per status, `RequestId` and `Endpoint` on every API exception, and `RequestId` on successful responses |
 | D21 | The full declared type footprint is supported: every permissive `string \| object \| array \| null` member, the map-of-permissive Choice criteria, the array-of-permissive Score levels, the mixed string-or-integer error path, and caller-supplied request headers |
 | D22 | Unmodelled fields are reachable in both directions on every wire model, matching the vendor's `extra_body` escape hatch on the request and exceeding their skip-and-warn behaviour on unknown answer kinds |
+| D23 | No model enum. The model set is open, the default is the `jev-latest` alias, and repeated availability questions are served by a lazily populated per-client cache that never fetches at construction and never shares across accounts |
 
 ---
 

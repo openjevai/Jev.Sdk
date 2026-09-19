@@ -14,7 +14,7 @@ namespace Jev.Sdk.Tests;
 /// </summary>
 internal sealed class StubTransport : ITypeSafeTransport
 {
-    private readonly Queue<Func<TransportRequest, TransportResponse>> _responses = new();
+    private readonly Queue<Func<TransportRequest, Task<TransportResponse>>> _responses = new();
 
     /// <summary>Every request this transport was asked to send, in order.</summary>
     public List<TransportRequest> Requests { get; } = [];
@@ -30,14 +30,14 @@ internal sealed class StubTransport : ITypeSafeTransport
     {
         byte[] body = Encoding.UTF8.GetBytes(json);
 
-        _responses.Enqueue(_ => new TransportResponse(statusCode, body, retryAfter));
+        _responses.Enqueue(_ => Task.FromResult(new TransportResponse(statusCode, body, retryAfter)));
         return this;
     }
 
     /// <summary>Queues a JSON response for the first request only, then behaves as queued next.</summary>
     public StubTransport EnqueueRaw(byte[]? body, HttpStatusCode statusCode = HttpStatusCode.OK, TimeSpan? retryAfter = null)
     {
-        _responses.Enqueue(_ => new TransportResponse(statusCode, body, retryAfter));
+        _responses.Enqueue(_ => Task.FromResult(new TransportResponse(statusCode, body, retryAfter)));
         return this;
     }
 
@@ -52,12 +52,27 @@ internal sealed class StubTransport : ITypeSafeTransport
     public StubTransport Enqueue(Func<TransportRequest, TransportResponse> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
+        _responses.Enqueue(request => Task.FromResult(factory(request)));
+        return this;
+    }
+
+    /// <summary>
+    /// Queues a response produced asynchronously.
+    /// </summary>
+    /// <remarks>
+    /// Use this rather than <see cref="Enqueue(Func{TransportRequest, TransportResponse})"/> when a
+    /// test needs a request to be genuinely in flight: a synchronous factory blocks the caller's
+    /// thread, so the request never actually suspends and concurrency cannot be observed.
+    /// </remarks>
+    public StubTransport EnqueueAsync(Func<TransportRequest, Task<TransportResponse>> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
         _responses.Enqueue(factory);
         return this;
     }
 
     /// <inheritdoc />
-    public Task<TransportResponse> SendAsync(TransportRequest request, CancellationToken cancellationToken)
+    public async Task<TransportResponse> SendAsync(TransportRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -71,12 +86,9 @@ internal sealed class StubTransport : ITypeSafeTransport
 
         // The last queued response is reused once the queue is drained, so a test that expects
         // retries does not have to enumerate every attempt.
-        if (_responses.Count == 1)
-        {
-            Func<TransportRequest, TransportResponse> only = _responses.Peek();
-            return Task.FromResult(only(request));
-        }
+        Func<TransportRequest, Task<TransportResponse>> handler =
+            _responses.Count == 1 ? _responses.Peek() : _responses.Dequeue();
 
-        return Task.FromResult(_responses.Dequeue()(request));
+        return await handler(request).ConfigureAwait(false);
     }
 }

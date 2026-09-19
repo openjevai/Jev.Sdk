@@ -167,6 +167,87 @@ public class DependencyInjectionTests
     }
 
     [Fact]
+    public async Task Warmup_FetchesTheModelListThroughTheContainer()
+    {
+        // The host-startup path: the client is resolved from the container, warmed, and a later
+        // cached read is then free.
+        StubTransport transport = new StubTransport().EnqueueJson(
+            """{"models":[{"name":"jev-latest","description":"d","release_date":"2026-09-15"}]}""");
+
+        ServiceCollection services = new();
+        services.AddSingleton<ITypeSafeTransport>(transport);
+        services.AddLogging();
+        services.AddJevClient(ConfigurationWithKey("di-key"));
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        using JevClient client = provider.GetRequiredService<JevClient>();
+
+        bool warmed = await JevClientWarmup.WarmAsync(
+            client,
+            provider.GetService<ILogger<JevClient>>(),
+            CancellationToken.None);
+
+        Assert.True(warmed);
+        Assert.Equal(1, transport.RequestCount);
+
+        IReadOnlyList<ModelMetadata> models = await client.GetAvailableModelsAsync(CancellationToken.None);
+
+        Assert.Single(models);
+        Assert.Equal(1, transport.RequestCount);
+    }
+
+    [Fact]
+    public async Task Warmup_ReportsFailureWithoutThrowing()
+    {
+        StubTransport transport = new StubTransport()
+            .EnqueueJson("""{"error":"bad key"}""", System.Net.HttpStatusCode.Unauthorized);
+
+        ServiceCollection services = new();
+        services.AddSingleton<ITypeSafeTransport>(transport);
+        services.AddJevClient(ConfigurationWithKey("di-key"));
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        using JevClient client = provider.GetRequiredService<JevClient>();
+
+        Assert.False(await JevClientWarmup.WarmAsync(client, logger: null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Warmup_LogsTheOutcomeWhenALoggerIsSupplied()
+    {
+        // Both branches are exercised: success logs at debug, failure at information, so an operator
+        // can see whether startup discovery worked.
+        RecordingLoggerProvider recorder = new();
+        ILoggerFactory factory = LoggerFactory.Create(builder => builder
+            .SetMinimumLevel(LogLevel.Trace)
+            .AddProvider(recorder));
+        ILogger logger = factory.CreateLogger("Jev.Sdk.Tests");
+
+        StubTransport ok = new StubTransport().EnqueueJson(
+            """{"models":[{"name":"jev-latest","description":"d","release_date":"2026-09-15"}]}""");
+
+        using JevClient okClient = TestClient.Create(ok);
+        Assert.True(await JevClientWarmup.WarmAsync(okClient, logger, CancellationToken.None));
+        Assert.Contains(recorder.Messages, m => m.Contains("served locally", StringComparison.Ordinal));
+
+        recorder.Messages.Clear();
+
+        StubTransport failing = new StubTransport()
+            .EnqueueJson("""{"error":"bad key"}""", System.Net.HttpStatusCode.Unauthorized);
+
+        using JevClient failingClient = TestClient.Create(failing);
+        Assert.False(await JevClientWarmup.WarmAsync(failingClient, logger, CancellationToken.None));
+        Assert.Contains(recorder.Messages, m => m.Contains("retry on first use", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Warmup_RejectsANullClient()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => JevClientWarmup.WarmAsync(null!, logger: null, CancellationToken.None));
+    }
+
+    [Fact]
     public void JevConfigurationLoader_BuildsFromADirectory()
     {
         string directory = Directory.CreateTempSubdirectory("jev-config-test").FullName;

@@ -107,6 +107,18 @@ public sealed class JevClientOptions
     public bool ValidateRequests { get; set; } = true;
 
     /// <summary>
+    /// How long a fetched model list is served from the client's cache before the next cached read
+    /// refetches. Defaults to one hour. Zero disables caching entirely, so every call to
+    /// <c>GetAvailableModelsAsync</c> performs a request.
+    /// </summary>
+    /// <remarks>
+    /// The cache is per client rather than process-wide, because <c>/v1/models</c> returns the models
+    /// available to the authenticated account. A shared cache would serve one account's list to
+    /// another.
+    /// </remarks>
+    public TimeSpan ModelCacheDuration { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// Additional HTTP headers to send with every request.
     /// </summary>
     /// <remarks>
@@ -203,6 +215,11 @@ public sealed class JevClientOptions
             throw new JevConfigurationException("JevClientOptions.MaxRetryAfter cannot be negative.");
         }
 
+        if (ModelCacheDuration < TimeSpan.Zero)
+        {
+            throw new JevConfigurationException("JevClientOptions.ModelCacheDuration cannot be negative.");
+        }
+
         if (RetryJitterFraction is < 0 or > 1)
         {
             throw new JevConfigurationException("JevClientOptions.RetryJitterFraction must be between 0 and 1.");
@@ -240,6 +257,7 @@ public sealed class JevClientOptions
             MaxRetryDelay = MaxRetryDelay,
             MaxRetryAfter = MaxRetryAfter,
             RetryJitterFraction = RetryJitterFraction,
+            ModelCacheDuration = ModelCacheDuration,
             ValidateRequests = ValidateRequests,
             ConfigureJson = ConfigureJson,
         };
