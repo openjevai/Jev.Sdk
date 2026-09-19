@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Jev.Sdk.World.Play</RootNamespace>
+    <AssemblyName>Jev.Sdk.World.Play</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Loads a world document and plays it against the Jev API.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Jev.Sdk.World/Jev.Sdk.World.csproj" />
+    <ProjectReference Include="../../../src/Jev.Sdk.DependencyInjection/Jev.Sdk.DependencyInjection.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="DotNetEnv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Every world ships beside the executable, so 'play escape-the-room' works from a clone. -->
+    <None Include="../worlds/*.md" Link="worlds/%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="../worlds/*.json" Link="worlds/%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="../../Jev.Sdk.Sample/appSettings.json" Link="appSettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="../../Jev.Sdk.Sample/.env.example" Link=".env.example">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

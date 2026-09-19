@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="../../src/Jev.Sdk/Jev.Sdk.csproj" />
+  <Project Path="../../src/Jev.Sdk.DependencyInjection/Jev.Sdk.DependencyInjection.csproj" />
+  <Project Path="Jev.Sdk.World/Jev.Sdk.World.csproj" />
+  <Project Path="Jev.Sdk.World.Play/Jev.Sdk.World.Play.csproj" />
+  <Project Path="Jev.Sdk.World.Tests/Jev.Sdk.World.Tests.csproj" />
+</Solution>

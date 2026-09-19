@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jev.dev/schema/world.schema.json",
+  "title": "Jev World",
+  "description": "A playable world: its state, the judgements made about it, and the rules deciding what happens. See ABOUT-THE-GAME.md for the design this generalises.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "state",
+    "stateTemplate",
+    "judgements",
+    "rules"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Format version. The engine refuses any other, so a future change cannot be misread."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "goal": {
+      "type": "string",
+      "description": "One line telling the player what they are trying to do."
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Shown at the start, so the player has somewhere to begin."
+    },
+    "turnLimit": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 25
+    },
+    "stateTemplate": {
+      "type": "string",
+      "minLength": 1,
+      "description": "How the state is described to the model. Placeholders are state field keys. Every placeholder must name a declared field, or the model is sent a literal '{{has_keys}}'."
+    },
+    "state": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "type",
+          "initial",
+          "describe"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "enum": [
+              "bool",
+              "int",
+              "text"
+            ]
+          },
+          "initial": {},
+          "describe": {
+            "type": "object",
+            "description": "How this field reads in the state description, keyed by value. A bool must describe both 'true' and 'false'; an int or text may use '*' as a fallback sentence.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "judgements": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One API question per entry, all asked in a single call.",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "kind",
+          "question",
+          "fallback"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "noul",
+              "choice",
+              "score"
+            ],
+            "description": "noul is a probability, choice is one of a named set, score is a position on an ordered scale."
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The instruction sent to the model. Must use {{action}}. Wording is behaviour: see README.md for two measured cases where rephrasing made a world unplayable."
+          },
+          "fallback": {
+            "type": "string",
+            "description": "Used when the model returns nothing usable. For a choice or score it must match a declared option or level."
+          },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "description"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "What the option means, in the player's likely vocabulary. A bare name classifies far worse than a described one."
+                }
+              }
+            }
+          },
+          "levels": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "string"
+            },
+            "description": "Ordered levels for a score judgement."
+          }
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Evaluated in order; the first whose condition holds is applied.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "then"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "when": {
+            "$ref": "#/$defs/condition",
+            "description": "Omit for a catch-all rule."
+          },
+          "then": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/effect"
+            }
+          },
+          "narrate": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "ending": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "won": {
+          "type": "string"
+        },
+        "lost": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "condition": {
+      "type": "object",
+      "description": "Exactly one comparison, or exactly one combinator. Mixing forms is rejected: a condition that can express anything is a programming language, and a world author should be writing data.",
+      "additionalProperties": false,
+      "properties": {
+        "judgement": {
+          "type": "string",
+          "description": "A declared judgement key."
+        },
+        "state": {
+          "type": "string",
+          "description": "A declared state field key."
+        },
+        "atLeast": {
+          "type": "number",
+          "description": "Holds when the value is at or above this."
+        },
+        "below": {
+          "type": "number",
+          "description": "Holds when the value is below this."
+        },
+        "equals": {
+          "type": "string",
+          "description": "Holds when the value is this. Named 'equals' on the wire; the C# member is Matches so it does not shadow object.Equals."
+        },
+        "isOneOf": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "roll": {
+          "$ref": "#/$defs/roll"
+        },
+        "all": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "any": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "not": {
+          "$ref": "#/$defs/condition"
+        }
+      }
+    },
+    "roll": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A probability compared against a roll of the dice. This is how a world uses a probability as a probability rather than as a threshold.",
+      "properties": {
+        "chanceFrom": {
+          "type": "string",
+          "description": "The judgement supplying the chance."
+        },
+        "chance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "A fixed chance, when no judgement supplies one."
+        },
+        "atLeast": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "A floor the chance must clear before a roll is made, so a hopeless attempt stays hopeless on a lucky roll."
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Scales the chance, so a roll can be made harder or easier."
+        }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "set",
+            "increment",
+            "narrate",
+            "win",
+            "lose"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "description": "The field to change, for set and increment."
+        },
+        "to": {
+          "type": "string",
+          "description": "The value to set, interpreted against the field's declared type."
+        },
+        "by": {
+          "type": "integer",
+          "description": "How much to add, for increment."
+        },
+        "text": {
+          "type": "string",
+          "description": "The line to print, for narrate."
+        }
+      }
+    }
+  }
+}

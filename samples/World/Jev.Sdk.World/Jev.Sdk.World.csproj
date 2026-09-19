@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Jev.Sdk.World</RootNamespace>
+    <AssemblyName>Jev.Sdk.World</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>A schema-driven world engine: state, judgements and rules declared in data, played against the Jev API.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Jev.Sdk/Jev.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -85,6 +85,10 @@ secrets.json
 !.env.example
 !.env.sample
 
+# Packaged worlds: a shippable artifact, produced by samples/World/pack-world.sh, not source.
+/*.zip
+samples/World/*.zip
+
 # OS noise
 .DS_Store
 Thumbs.db
