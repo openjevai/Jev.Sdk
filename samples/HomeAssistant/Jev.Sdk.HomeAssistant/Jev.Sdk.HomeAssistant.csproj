@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Jev.Sdk.HomeAssistant</RootNamespace>
+    <AssemblyName>Jev.Sdk.HomeAssistant</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Home Assistant command sample using Jev.Sdk and raw Home Assistant HTTP API calls.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Jev.Sdk/Jev.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

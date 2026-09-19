@@ -463,6 +463,7 @@ resolution used to build serializer options on every typed call.
 | `samples/Jev.Sdk.Sample/` | A minimal console client |
 | `samples/Game/` | Escape the Room: a demo game showing `Choice`, `Score` and `Noul` in one call, with its own tests |
 | `samples/World/` | A schema-driven world engine: the same pattern as data. Loads a world from markdown, JSON, or a zip package, and plays it |
+| `samples/HomeAssistant/` | A CLI sample that uses Jev to form a bounded command plan, then invokes a user-confirmed raw Home Assistant REST service call |
 | `requirements/` | Requirements and locked design decisions |
 | `docs/` | Verified API notes |
 

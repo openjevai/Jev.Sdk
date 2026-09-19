@@ -5,5 +5,11 @@
   <Project Path="tests/Jev.Sdk.IntegrationTests/Jev.Sdk.IntegrationTests.csproj" />
   <Project Path="samples/Jev.Sdk.Sample/Jev.Sdk.Sample.csproj" />
   <Project Path="samples/Game/Jev.Sdk.Game/Jev.Sdk.Game.csproj" />
+  <Folder Name="/samples/" />
+  <Folder Name="/samples/HomeAssistant/">
+    <Project Path="samples/HomeAssistant/Jev.Sdk.HomeAssistant.Tests/Jev.Sdk.HomeAssistant.Tests.csproj" />
+    <Project Path="samples/HomeAssistant/Jev.Sdk.HomeAssistant/Jev.Sdk.HomeAssistant.csproj" />
+  </Folder>
+  <Folder Name="/src/" />
   <Project Path="samples/Game/Jev.Sdk.Game.Tests/Jev.Sdk.Game.Tests.csproj" />
 </Solution>
