@@ -18,6 +18,9 @@
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.7" />
+    <!-- Read by the SAMPLE only, to load its .env file. The library reads environment variables
+         directly and never opens a .env file, so this stays out of both shipped packages. -->
+    <PackageVersion Include="DotNetEnv" Version="3.2.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.9" />
   </ItemGroup>
 

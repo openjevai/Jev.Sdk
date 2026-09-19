@@ -53,13 +53,37 @@ TestResults/
 BenchmarkDotNet.Artifacts/
 
 # Local configuration and secrets — never commit
+#
+# The settings files are named with a capital S because that is exactly what the library
+# loads: JevEnvironment.GenericSettingsFile is "appSettings.json" and the machine override is
+# "appSettings.{MACHINE_NAME}.json". A lowercase "appsettings.Local.json" pattern would NOT
+# have matched either of them on a case-sensitive filesystem, so a developer's real key file
+# named the way the library reads it would have been committed. Patterns are repeated in both
+# cases so a file is protected whichever casing it was created with.
+# The generic settings file is the one a user following the docs creates in their own app, so it is
+# ignored everywhere — including a repo root, which is where a real key would end up committed.
+appSettings.json
+appsettings.json
+appSettings.Local.json
 appsettings.Local.json
+appSettings.*.Local.json
 appsettings.*.Local.json
+appSettings.*.json
+appsettings.*.json
+# The tracked templates, re-included after the patterns above.
+#
+# Scoped to the sample directory on purpose. An unscoped "!appSettings.json" would un-ignore that
+# file name at EVERY depth, including a repo-root appSettings.json — which is exactly where someone
+# would put a real key and where it would then be committed. Only the shipped templates are
+# re-included.
+!samples/Jev.Sdk.Sample/appSettings.json
+!samples/Jev.Sdk.Sample/.env.example
 secrets.json
 *.secrets.json
 .env
 .env.*
 !.env.example
+!.env.sample
 
 # OS noise
 .DS_Store

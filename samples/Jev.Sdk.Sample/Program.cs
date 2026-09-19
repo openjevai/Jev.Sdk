@@ -5,9 +5,17 @@
 //
 // It is kept plain on purpose: no argument parsing, no framework, no output formatting beyond
 // what makes the result readable. Its job is to exercise the library by hand.
+//
+// Configuration comes from two documented example files, shipped beside this file:
+//   .env.example   — copy to .env and fill in. Loaded into the process environment here, because
+//                    .NET reads environment variables and does not open .env itself.
+//   appSettings.json — the same file JevConfigurationLoader reads for a real host.
+// Neither is required. With neither present the sample still runs and prompts for a key.
 
 using System.Globalization;
 using Jev.Sdk;
+using Jev.Sdk.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 
 namespace Jev.Sdk.Sample;
 
@@ -15,6 +23,8 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        LoadDotEnv();
+
         using CancellationTokenSource cancellation = new();
         Console.CancelKeyPress += (_, eventArgs) =>
         {
@@ -119,7 +129,83 @@ internal static class Program
 
         string? fromEnvironment = Environment.GetEnvironmentVariable(JevEnvironment.ApiKeyVariable);
 
-        return string.IsNullOrWhiteSpace(fromEnvironment) ? null : fromEnvironment;
+        if (!string.IsNullOrWhiteSpace(fromEnvironment))
+        {
+            return fromEnvironment;
+        }
+
+        // Fall back to the settings files the library documents. The key may legitimately live in
+        // appSettings.json instead of the environment, and the precedence the library defines puts
+        // the environment first, so this only runs when the environment had nothing.
+        return KeyFromSettingsFiles();
+    }
+
+    /// <summary>
+    /// Loads a <c>.env</c> file into the process environment, if one is present.
+    /// </summary>
+    /// <remarks>
+    /// This exists because .NET does not read <c>.env</c> files. The sample loads one so the
+    /// documented example file is genuinely usable rather than decorative, and so the variables
+    /// reach the client the same way a shell-exported variable would.
+    ///
+    /// The file is looked for beside the executable first, then in the working directory, so the
+    /// sample works both from a build output folder and from a clone.
+    ///
+    /// Nothing here is required. A missing or unreadable file is reported and ignored: the caller
+    /// is then prompted for a key, which is what happens with no configuration at all.
+    /// </remarks>
+    private static void LoadDotEnv()
+    {
+        foreach (string directory in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+        {
+            string candidate = Path.Combine(directory, ".env");
+
+            if (!File.Exists(candidate))
+            {
+                continue;
+            }
+
+            try
+            {
+                DotNetEnv.Env.Load(candidate);
+                Console.WriteLine($"Loaded environment from {candidate}");
+                return;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException)
+            {
+                // A malformed .env is worth saying out loud, but it must not stop the sample: the
+                // key can still come from the environment or from a prompt.
+                Console.WriteLine($"Ignoring {candidate}: {exception.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads <c>Jev:ApiKey</c> from the settings files the library loads.
+    /// </summary>
+    /// <remarks>
+    /// Uses the library's own loader rather than opening the files here, so the sample resolves
+    /// configuration exactly the way a real host does — same file names, same machine override,
+    /// same precedence. A value that is still the documented placeholder is treated as unset, so
+    /// the prompt appears rather than the sample sending "REPLACE ME" to the API.
+    /// </remarks>
+    private static string? KeyFromSettingsFiles()
+    {
+        try
+        {
+            IConfigurationRoot configuration = JevConfigurationLoader.Build(AppContext.BaseDirectory);
+            string? key = JevOptionsBinding.FromConfiguration(configuration).ApiKey;
+
+            return Placeholder.MeansUnset(key) ? null : key;
+        }
+        catch (JevConfigurationException exception)
+        {
+            // A settings file that exists but is malformed must not be silent: the caller would
+            // otherwise see a prompt and assume no file was found at all.
+            Console.WriteLine($"Ignoring settings files: {exception.Message}");
+
+            return null;
+        }
     }
 
     private static async Task ListModelsAsync(JevClient client, CancellationToken cancellationToken)

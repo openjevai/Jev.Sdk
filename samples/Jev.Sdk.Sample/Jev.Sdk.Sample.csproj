@@ -18,6 +18,28 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="DotNetEnv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Ship the documented example files beside the executable so the sample can be run straight
+      from a clone and finds them without the caller copying anything first.
+
+      appSettings.json is the same file the library loads, so it is copied rather than renamed:
+      the sample reads exactly what a real host reads. .env is NOT copied here — DotNetEnv loads
+      it from the working directory, and the sample looks beside the executable first, then in
+      the working directory, so either a copied .env or a repo-root one works.
+    -->
+    <None Include="appSettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include=".env.example">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include=".env" Condition="Exists('.env')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
