@@ -108,13 +108,118 @@ public sealed partial class JevClient
         CancellationToken cancellationToken) =>
         SystemOneCoreAsync(StructuredValue.FromJson(state), questions, model, cancellationToken);
 
-    private async Task<SystemOneResponse> SystemOneCoreAsync(
+    /// <summary>
+    /// Evaluates the state and deserializes the response into a caller-supplied type.
+    /// </summary>
+    /// <typeparam name="TResponse">
+    /// The caller's response type. It replaces the library's own <see cref="SystemOneResponse"/> as
+    /// the deserialization target, so a caller can bind exactly the shape they care about.
+    /// </typeparam>
+    /// <param name="state">The content to evaluate. Plain text, or structured JSON.</param>
+    /// <param name="questions">Questions keyed by a name you choose.</param>
+    /// <param name="responseTypeInfo">
+    /// Source-generated type information for <typeparamref name="TResponse"/>, so the library never
+    /// reflects over the caller's type. Required for trimming and Native AOT.
+    /// </param>
+    /// <param name="model">The model to use. Null uses <see cref="DefaultModel"/>.</param>
+    /// <param name="cancellationToken">Cancels the call, including any retry delay.</param>
+    /// <returns>The response, read into <typeparamref name="TResponse"/>.</returns>
+    /// <remarks>
+    /// The response shape in this API is partly caller-determined: the answer ids are the question
+    /// ids you chose, and each answer's kind mirrors its question's kind. The vendor's Python SDK
+    /// exposes the same capability as <c>response_model=</c>, and its TypeScript SDK infers the shape
+    /// with mapped types — something C# generics cannot express, because a type's members cannot be
+    /// derived from a type argument's members without structural typing.
+    /// <para>
+    /// This overload is the C#-expressible equivalent of the Python form. Use it when you want a
+    /// concrete type rather than the dictionary in <see cref="SystemOneResponse"/>:
+    /// </para>
+    /// <code>
+    /// sealed class BillingVerdict
+    /// {
+    ///     public Dictionary&lt;string, Answer&gt; Answers { get; set; } = new();
+    ///     public Usage? Usage { get; set; }
+    /// }
+    /// </code>
+    /// <para>
+    /// The unmodelled-response pass-through is not lost: if the API adds a field your type does not
+    /// declare, adding <c>[JsonExtensionData]</c> to your own model captures it.
+    /// </para>
+    /// <para>
+    /// Local request validation still runs, because it depends only on the questions. No response
+    /// validation is possible here: the library does not know the shape you asked for.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="JevRequestValidationException">The request is locally invalid.</exception>
+    /// <exception cref="JevConfigurationException">No API key is available.</exception>
+    /// <exception cref="JevConnectionException">The exchange failed, or the response could not be read as your type.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation was requested.</exception>
+    public Task<TResponse> SystemOneAsync<TResponse>(
+        StructuredValue? state,
+        IDictionary<string, Question> questions,
+        JsonTypeInfo<TResponse> responseTypeInfo,
+        string? model,
+        CancellationToken cancellationToken) =>
+        SystemOneCoreAsync(state ?? StructuredValue.Null, questions, responseTypeInfo, model, cancellationToken);
+
+    /// <summary>
+    /// Evaluates a plain-text state and deserializes the response into a caller-supplied type.
+    /// </summary>
+    /// <typeparam name="TResponse">The caller's response type.</typeparam>
+    /// <param name="state">The text to evaluate.</param>
+    /// <param name="questions">Questions keyed by a name you choose.</param>
+    /// <param name="responseTypeInfo">Source-generated type information for <typeparamref name="TResponse"/>.</param>
+    /// <param name="model">The model to use. Null uses <see cref="DefaultModel"/>.</param>
+    /// <param name="cancellationToken">Cancels the call, including any retry delay.</param>
+    /// <returns>The response, read into <typeparamref name="TResponse"/>.</returns>
+    public Task<TResponse> SystemOneAsync<TResponse>(
+        string state,
+        IDictionary<string, Question> questions,
+        JsonTypeInfo<TResponse> responseTypeInfo,
+        string? model,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        return SystemOneCoreAsync(StructuredValue.FromString(state), questions, responseTypeInfo, model, cancellationToken);
+    }
+
+    /// <summary>
+    /// Evaluates a caller-owned object as the state and deserializes the response into a
+    /// caller-supplied type.
+    /// </summary>
+    /// <typeparam name="TState">The caller's state type.</typeparam>
+    /// <typeparam name="TResponse">The caller's response type.</typeparam>
+    /// <param name="state">The object to evaluate.</param>
+    /// <param name="stateTypeInfo">Source-generated type information for <typeparamref name="TState"/>.</param>
+    /// <param name="questions">Questions keyed by a name you choose.</param>
+    /// <param name="responseTypeInfo">Source-generated type information for <typeparamref name="TResponse"/>.</param>
+    /// <param name="model">The model to use. Null uses <see cref="DefaultModel"/>.</param>
+    /// <param name="cancellationToken">Cancels the call, including any retry delay.</param>
+    /// <returns>The response, read into <typeparamref name="TResponse"/>.</returns>
+    public Task<TResponse> SystemOneAsync<TState, TResponse>(
+        TState state,
+        JsonTypeInfo<TState> stateTypeInfo,
+        IDictionary<string, Question> questions,
+        JsonTypeInfo<TResponse> responseTypeInfo,
+        string? model,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stateTypeInfo);
+        ArgumentNullException.ThrowIfNull(questions);
+
+        return SystemOneCoreAsync(StructuredValue.FromObject(state, stateTypeInfo), questions, responseTypeInfo, model, cancellationToken);
+    }
+
+    private async Task<TResponse> SystemOneCoreAsync<TResponse>(
         StructuredValue state,
         IDictionary<string, Question> questions,
+        JsonTypeInfo<TResponse> responseTypeInfo,
         string? model,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(questions);
+        ArgumentNullException.ThrowIfNull(responseTypeInfo);
         cancellationToken.ThrowIfCancellationRequested();
 
         string effectiveModel = string.IsNullOrWhiteSpace(model) ? _options.DefaultModel : model;
@@ -139,10 +244,19 @@ public sealed partial class JevClient
             HttpMethod.Post,
             SystemOnePath,
             payload,
-            _jsonContext.SystemOneResponse,
+            responseTypeInfo,
             effectiveModel,
             questions.Count,
             isSystemOne: true,
             cancellationToken).ConfigureAwait(false);
     }
+
+    private Task<SystemOneResponse> SystemOneCoreAsync(
+        StructuredValue state,
+        IDictionary<string, Question> questions,
+        string? model,
+        CancellationToken cancellationToken) =>
+        // One implementation, so the typed and untyped paths cannot drift. The library's own response
+        // type is simply the default TResponse.
+        SystemOneCoreAsync(state, questions, _jsonContext.SystemOneResponse, model, cancellationToken);
 }

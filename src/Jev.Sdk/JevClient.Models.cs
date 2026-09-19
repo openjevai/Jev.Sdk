@@ -59,7 +59,10 @@ public sealed partial class JevClient
             isSystemOne: false,
             cancellationToken).ConfigureAwait(false);
 
-        IReadOnlyList<ModelMetadata> models = [.. response.Models];
+        // A server that omits or nulls the member would otherwise produce an ArgumentNullException from
+        // the collection expression, which is neither a JevException nor what any documented method
+        // promises. An empty list is the honest reading: the account has no models to report.
+        IReadOnlyList<ModelMetadata> models = response.ModelsOrEmpty;
 
         // A successful fetch refreshes the cache, so a caller mixing this with the cached accessor
         // does not immediately pay for a second call.

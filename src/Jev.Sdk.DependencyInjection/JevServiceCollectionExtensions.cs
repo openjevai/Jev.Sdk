@@ -68,15 +68,53 @@ public static class JevServiceCollectionExtensions
     {
         IConfiguration? config = ResolveConfiguration(provider, configuration);
 
-        // Precedence: the environment variable, then the machine-specific settings file, then
-        // the generic settings file. An explicit key supplied to the client is handled by the
-        // client itself, above this chain. The settings files were read once by the host, using
-        // JevConfigurationLoader: the core library performs no file I/O.
+        // The documented precedence, highest first:
+        //
+        //   1. an explicit key on JevClientOptions
+        //   2. the TYPESAFE_API_KEY environment variable
+        //   3. the settings files, machine-specific before generic
+        //
+        // The explicit key must be in this chain, not merely on the options object: the client is
+        // constructed with this provider, which replaces its own ladder, so a key that is absent here
+        // is a key the client cannot see. Omitting it made an explicit options key lose to the
+        // environment variable, contradicting the documented order.
         return new ChainedApiKeyProvider(
+            ExplicitKeyFromOptions(provider),
             new EnvironmentApiKeyProvider(),
             config is null ? null : new ConfigurationApiKeyProvider(config));
     }
 
+    /// <summary>
+    /// Wraps an explicitly configured key as a provider, so precedence holds when the client's own
+    /// ladder is replaced by this chain.
+    /// </summary>
+    private static LazyApiKeyProvider ExplicitKeyFromOptions(IServiceProvider provider)
+    {
+        // Resolved lazily: the options singleton is built from the same container, and asking for it
+        // here during provider construction would be circular. A provider defers the lookup instead.
+        return new LazyApiKeyProvider(() =>
+            provider.GetService<JevClientOptions>()?.ApiKey);
+    }
+
     private static IConfiguration? ResolveConfiguration(IServiceProvider provider, IConfiguration? configuration) =>
         configuration ?? provider.GetService<IConfiguration>();
+}
+
+/// <summary>
+/// Wraps a lazily resolved API key so a provider can be built before the value it reads exists.
+/// </summary>
+internal sealed class LazyApiKeyProvider : IApiKeyProvider
+{
+    private readonly Func<string?> _read;
+
+    internal LazyApiKeyProvider(Func<string?> read) => _read = read;
+
+    public Task<string?> GetApiKeyAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string? key = _read();
+
+        return Task.FromResult(string.IsNullOrWhiteSpace(key) ? null : key);
+    }
 }

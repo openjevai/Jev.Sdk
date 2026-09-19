@@ -116,7 +116,12 @@ public sealed partial class JevClient : IDisposable
 
         _logger = logger ?? NullLogger.Instance;
         _timeProvider = timeProvider;
-        _jitterSource = jitterSource;
+
+        // A null here means "no injected source", not "no jitter". Production jitter must actually
+        // happen: without it every client that hits the same rate limit retries in lockstep, which is
+        // the problem the jitter fraction exists to solve. A test injects a constant source to make the
+        // delay deterministic.
+        _jitterSource = jitterSource ?? Random.Shared.NextDouble;
     }
 
     /// <summary>The model used by calls that do not name one.</summary>

@@ -54,6 +54,9 @@ EXEMPT_LINES = {
     "Jev.Sdk/Questions/StructuredValue.cs": {
         132: "Serializing a non-null value never yields JsonValueKind.Undefined, so the default arm is unreachable.",
     },
+    "Jev.Sdk/JevClient.Pipeline.cs": {
+        335: "A JsonTypeInfo produced by a JsonSerializerContext always carries a resolver, so the no-resolver guard cannot be reached through the public API; it exists in case a caller constructs type information by hand.",
+    },
 }
 
 # Path fragments identifying generated code. Source-generated serialization metadata and generated

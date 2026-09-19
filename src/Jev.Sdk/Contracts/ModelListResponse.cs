@@ -13,7 +13,18 @@ namespace Jev.Sdk;
 /// </summary>
 public sealed class ModelListResponse : JevResponse
 {
-    /// <summary>Models and aliases available to the authenticated account.</summary>
+    /// <summary>
+    /// Models and aliases available to the authenticated account.
+    /// </summary>
+    /// <remarks>
+    /// Settable to null because a JSON null is a legal value for the member, and deserialization will
+    /// produce one. Callers and the client both treat a null as "no models reported" rather than as a
+    /// fault, so it never surfaces as an ArgumentNullException.
+    /// </remarks>
     [JsonPropertyName("models")]
-    public IList<ModelMetadata> Models { get; set; } = new List<ModelMetadata>();
+    public IList<ModelMetadata>? Models { get; set; } = new List<ModelMetadata>();
+
+    /// <summary>The models, never null. An empty list when the server reported none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<ModelMetadata> ModelsOrEmpty => Models is null ? [] : [.. Models];
 }
