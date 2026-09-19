@@ -25,6 +25,13 @@ public sealed class Usage
     [JsonPropertyName("output_tokens")]
     public int OutputTokens { get; set; }
 
-    /// <summary>Total tokens across input and output.</summary>
+    /// <summary>
+    /// Total tokens across input and output.
+    /// </summary>
+    /// <remarks>
+    /// Computed here, not reported by the API, so it is excluded from serialization. Writing it back
+    /// would invent a field the service does not define.
+    /// </remarks>
+    [JsonIgnore]
     public int TotalTokens => InputTokens + OutputTokens;
 }

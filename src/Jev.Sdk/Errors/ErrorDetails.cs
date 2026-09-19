@@ -41,6 +41,10 @@ public sealed class ErrorDetails
     /// The location rendered as a dotted path, for example
     /// <c>body.questions.urgency.score.criteria</c>.
     /// </summary>
+    /// <remarks>
+    /// Computed here, not reported by the API, so it is excluded from serialization.
+    /// </remarks>
+    [JsonIgnore]
     public string LocationPath => string.Join('.', Location.Select(static part => part?.ToString() ?? string.Empty));
 
     /// <inheritdoc />

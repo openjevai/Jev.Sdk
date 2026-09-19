@@ -60,9 +60,4 @@ internal static partial class JevLog
         Message = "{Method} {Path} failed after {Attempts} attempt(s): the response could not be interpreted.")]
     internal static partial void ResponseUnreadable(ILogger logger, string method, string path, int attempts);
 
-    [LoggerMessage(
-        EventId = 4000,
-        Level = LogLevel.Trace,
-        Message = "Serializing request body for {Path}. Contents are not logged.")]
-    internal static partial void SerializingRequest(ILogger logger, string path);
 }

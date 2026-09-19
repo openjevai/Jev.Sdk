@@ -30,6 +30,10 @@ public sealed class ModelMetadata
     /// <summary>
     /// The release date parsed as a <see cref="DateOnly"/>, when it is well formed.
     /// </summary>
+    /// <remarks>
+    /// Computed here, not reported by the API, so it is excluded from serialization.
+    /// </remarks>
+    [JsonIgnore]
     public DateOnly? ParsedReleaseDate =>
         DateOnly.TryParseExact(
             ReleaseDate,

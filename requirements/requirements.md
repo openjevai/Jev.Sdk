@@ -95,6 +95,24 @@ Three question kinds, each with its own criteria shape:
 | `choice` | required map of option → description-or-null | `choice`, `probabilities`, `confidence` |
 | `score` | required ordered array of level descriptions | `score`, `legend`, `probabilities`, `confidence` |
 
+### R3a — Null as a first-class shape
+
+A JSON `null` inside a collection is a value, not an absence, and must never crash a read.
+
+`JsonConverter<T>.HandleNull` defaults to `false` for reference types, which makes the serializer
+handle a null token itself and skip the converter entirely. The consequence is that a null inside a
+map or array becomes a C# null rather than the library's own null value, and reading it throws.
+Every converter here therefore declares `HandleNull => true` and takes responsibility for its own
+null tokens.
+
+The same property is what makes `JsonElementBox` meaningful: without it, a member that is present and
+null is indistinguishable from one that is absent, which is the distinction the type exists to
+preserve. `ValidationError.input` has no declared type, so null is a legal value for it.
+
+Computed members — `Usage.TotalTokens`, `ModelMetadata.ParsedReleaseDate`,
+`ErrorDetails.LocationPath` — are `[JsonIgnore]`, because they are calculated here rather than
+reported by the API, and a payload that echoes invented fields is a protocol deviation.
+
 ### R4 — Structured values
 
 `state`, question `instructions`, Choice option descriptions, Score levels, Noul
@@ -381,6 +399,8 @@ non-breaking; removing one would not be.
 | D22 | Unmodelled fields are reachable in both directions on every wire model, matching the vendor's `extra_body` escape hatch on the request and exceeding their skip-and-warn behaviour on unknown answer kinds |
 | D23 | No model enum. The model set is open, the default is the `jev-latest` alias, and repeated availability questions are served by a lazily populated per-client cache that never fetches at construction and never shares across accounts |
 | D24 | The per-attempt timeout is enforced with a linked cancellation token rather than by assigning `HttpClient.Timeout`, because that property is immutable once a client has served a request and callers legitimately pass pooled or factory-managed clients |
+| D25 | Every converter declares `HandleNull => true`, so a JSON null inside a collection is a value rather than a C# null, and an absent member stays distinguishable from a null one |
+| D26 | Computed members are `[JsonIgnore]`; a serialized response never carries a field the API does not define |
 
 ---
 

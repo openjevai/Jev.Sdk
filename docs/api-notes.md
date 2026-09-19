@@ -364,6 +364,41 @@ Both endpoints declare `application/json` for their request and response bodies,
 declared security scheme is `HTTPBearer` with `scheme: bearer`. The specification sets no top-level
 `security` requirement, so bearer auth is documented in prose rather than enforced by the spec.
 
+## 6d. Three defects found by probing semantics rather than names
+
+A name-based diff of the specification against the implementation reported no missing properties
+across all 40 properties and 16 schemas. It would not have found any of the following, because each
+is about behaviour rather than about which members exist. All three were found by writing probes
+that exercised the declared shapes, and all three were confirmed by execution before being fixed.
+
+**1. A JSON null inside a collection threw on read.** `JsonConverter<T>.HandleNull` defaults to
+`false` for reference types. That means the serializer handles a null token itself and never calls
+the converter, so a JSON null *inside a map or array* became a C# null rather than a
+`StructuredValue.Null`. Because the declared types are `map<string | object | array | null>` and
+`array<string | object | array>`, a null is a shape the server may legally send — and reading one
+threw `NullReferenceException`. The fix is `HandleNull => true` on both converters. This is the more
+dangerous class of bug of the three: it is a crash on a valid response.
+
+**2. The same defect defeated `JsonElementBox`.** The box exists so that an *absent* member is
+distinguishable from one that is present and null. With `HandleNull` unset, a member declared as
+JSON null came back as a null box, which is indistinguishable from absence — the one outcome the
+type was written to prevent. `ValidationError.input` has no declared type, so null is a legal value
+for it.
+
+**3. Computed members were serialized.** Parsing a response and writing it back emitted three fields
+the API does not define: `total_tokens` on `Usage`, `parsed_release_date` on `ModelMetadata`, and
+`location_path` on `ValidationError`. A client that echoes a payload with invented fields is a
+protocol deviation, and it invites the reader to believe the server sent them. All three are now
+`[JsonIgnore]`.
+
+**4. A declared log message was never emitted.** `JevLog.SerializingRequest` had no call site. Its
+logger-message generator wrote `ILogger` extension members that nothing reached, and the coverage
+numbers were counting them. Removed.
+
+The lesson is worth recording: a property-name diff, however thorough, verifies *shape* and not
+*behaviour*. The three fixes above changed no public signature and no schema mapping — a diff would
+have stayed green through all of them.
+
 ## 7. Client design consequences
 
 - **Model discovery is required**, not optional — it is the only documented way

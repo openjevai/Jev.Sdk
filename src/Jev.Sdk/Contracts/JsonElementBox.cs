@@ -14,8 +14,9 @@ namespace Jev.Sdk;
 /// </summary>
 /// <remarks>
 /// <see cref="JsonElement"/> is a struct, so an absent element and a default element are
-/// indistinguishable. Boxing makes absence mean absence, which matters for the optional
-/// members the server may or may not include.
+/// indistinguishable. Boxing makes absence mean absence, which matters for the optional members the
+/// server may or may not include. That distinction only holds if a JSON null produces a box, hence
+/// <see cref="JsonElementBoxConverter.HandleNull"/>.
 /// </remarks>
 [JsonConverter(typeof(JsonElementBoxConverter))]
 public sealed class JsonElementBox
@@ -34,8 +35,17 @@ public sealed class JsonElementBox
 /// <summary>
 /// Reads and writes <see cref="JsonElementBox"/>, preserving whatever JSON was present.
 /// </summary>
+/// <remarks>
+/// HandleNull must be true. Without it the serializer handles the null token itself, so a member
+/// declared as JSON null comes back as a null box — identical to a member that was absent entirely,
+/// which is the one outcome the box exists to prevent. Several members the specification declares as
+/// untyped (`input`) or permissive accept JSON null as a real value.
+/// </remarks>
 public sealed class JsonElementBoxConverter : JsonConverter<JsonElementBox>
 {
+    /// <inheritdoc />
+    public override bool HandleNull => true;
+
     /// <inheritdoc />
     public override JsonElementBox Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
@@ -47,7 +57,12 @@ public sealed class JsonElementBoxConverter : JsonConverter<JsonElementBox>
     public override void Write(Utf8JsonWriter writer, JsonElementBox value, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(writer);
-        ArgumentNullException.ThrowIfNull(value);
+
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
 
         value.Element.WriteTo(writer);
     }
