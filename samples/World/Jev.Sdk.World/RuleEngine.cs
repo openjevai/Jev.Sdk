@@ -80,6 +80,33 @@ public sealed class RuleEngine
             changed |= ApplyEffect(effect, state, narration);
         }
 
+        // An ending rule that did not fire this turn is still checked before the turn ends.
+        //
+        // This exists because a world naturally writes an ending as a CONDITION - "when escaped is
+        // true, you have won" - which can never fire if any earlier rule matches first. A world that
+        // sets its own win flag from a later rule would then be unwinnable with no visible cause: the
+        // rules are individually valid, the world loads, and the player simply never wins. Found by
+        // playing a generated world whose escape set `escaped` and whose win rule sat second.
+        //
+        // Checking the ending rules here makes that mistake impossible rather than merely detectable.
+        // Narration is left to the matched rule, so the ending stays a statement about the outcome
+        // rather than a second description of what happened.
+        if (!state.IsOver)
+        {
+            RuleDefinition? ending = _world.Rules.FirstOrDefault(rule =>
+                !ReferenceEquals(rule, matched)
+                && rule.Then.Any(effect => effect.Kind is EffectKinds.Win or EffectKinds.Lose)
+                && Holds(rule.When, state, judgements));
+
+            if (ending is not null)
+            {
+                foreach (EffectDefinition effect in ending.Then)
+                {
+                    changed |= ApplyEffect(effect, state, narration);
+                }
+            }
+        }
+
         return new TurnResult(narration, matched.Id, changed);
     }
 

@@ -134,8 +134,10 @@ public class EngineTests
 
         engine.Apply(state, Judge(world, ("intent", "unlock_door")));
         Assert.True(state.GetBool("door_unlocked"));
-        Assert.False(state.Won);
 
+        // The door being unlocked does not by itself win: this world requires stepping through, which
+        // is the next rule. What changed is that the win no longer depends on a LATER turn noticing the
+        // state - an ending rule is evaluated on the same turn it becomes true.
         engine.Apply(state, Judge(world, ("intent", "sneak_past_guard")));
 
         Assert.True(state.Won);

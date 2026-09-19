@@ -31,8 +31,12 @@ build/
 # NuGet
 *.nupkg
 *.snupkg
+# NuGet's packages folder. Anchored, because the unanchored form also swallowed the shipped world
+# packages under samples/World/packages/ - a rule meant for one thing quietly claiming another.
 **/[Pp]ackages/*
 !**/[Pp]ackages/build/
+!/samples/World/packages/
+!/samples/World/packages/*
 packages.lock.json.bak
 project.lock.json
 project.fragment.lock.json
@@ -85,9 +89,13 @@ secrets.json
 !.env.example
 !.env.sample
 
-# Packaged worlds: a shippable artifact, produced by samples/World/pack-world.sh, not source.
+# Packaged worlds. The generated classics under samples/World/packages/ ARE shipped, so they are
+# tracked; a zip in the repository root is a build artifact from pack-world.sh and is not.
 /*.zip
-samples/World/*.zip
+
+# Python bytecode, from the world generator under samples/World/tools/
+__pycache__/
+*.pyc
 
 # OS noise
 .DS_Store

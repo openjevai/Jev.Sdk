@@ -217,6 +217,13 @@ Sibling folders in `samples/`:
 - `Game/` — the original hand-written Escape the Room, kept exactly as it was
 - `World/` — this engine, with `worlds/escape-the-room.md` as the same game expressed as data
 
+Inside `World/`:
+
+- `worlds/` — hand-written worlds: Escape the Room, and The Lighthouse
+- `worlds/classics/` — fifty generated worlds: five console classics in five styles. See `CLASSICS.md`
+- `packages/` — those fifty, packaged as playable zips
+- `tools/` — the generator that produced them, with its own schema documentation in `../schema/`
+
 ## Tests
 
 ```sh
