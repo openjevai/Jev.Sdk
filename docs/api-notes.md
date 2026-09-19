@@ -510,6 +510,46 @@ The library's behaviour is correct: it reports what answered, and the request na
 asserts the property that actually holds — the requested alias is one the service offers, and every
 advertised alias is accepted — instead of one that merely looked reasonable.
 
+## 6g. What the demo game revealed about prompt wording
+
+`samples/Game` implements the "Escape the Room" design, which asks five questions of three kinds in one
+call and then resolves the turn with deterministic rules. Building it surfaced a category of defect the
+rest of this repository has no equivalent for: **behaviour that depends on prompt wording rather than on
+code.** Three instances, all found by playing the game against the live service:
+
+**A question can be read as the wrong kind of question.** "Is that action physically possible from the
+position described in the state?" reads as a precondition check — *is the world already set up for
+this* — not as a question about physical possibility. It scored walking across the room to pick up a
+visible key at 0.55, below the threshold, so nearly everything a player typed was refused. Reworded to
+ask whether the body could carry the action out, the same inputs score 0.77-0.95 while flying through
+the ceiling scores 0.02.
+
+**An unanchored scale collapses.** "How loud is the action described in the player's own words?"
+returned roughly 0.17 for *every* action, including smashing a window, so the label always came back
+"silent" and a rule that vetoed on loud actions never fired. The model had no reference points for the
+scale. Anchoring the instruction with examples — breaking glass is extremely loud, picking something up
+quietly is silent or quiet — produced 2.9 for breaking glass against 0.7-0.9 for quiet movement.
+
+**Mentioning an object reads as acting on it.** "the window looks cold" classified as `break_window`
+until the intent instruction was told to prefer `other` unless the text describes something the player
+is actively trying to do. A classification question with an exhaustive option list will use an option if
+one is even vaguely suggested; the option descriptions have to carry the preference for "none of these".
+
+**And one thing the model will not do, which is not a defect.** Plausibility does not enforce inventory:
+"unlock the door with the key" scores 0.69-0.78 with the key on a table and 0.90-0.94 with it held,
+consistently across repeated calls. The model judges the motion possible either way. The first draft of
+the live suite asserted the opposite and was wrong. The design is right and the test was wrong: missing
+inventory belongs in the deterministic rules, which check the state directly before acting. Forcing this
+judgement to carry that weight would need a threshold that also rejects real actions.
+
+Two process notes worth keeping:
+
+- None of these were caught by the game's own unit tests, which passed throughout. They could not be:
+  the rules were correct and the wording was wrong.
+- Live judgement tests are **not perfectly deterministic**. Three consecutive full runs passed 74/74 and
+  a fourth failed one row, because a borderline score landed on the other side of a threshold. Assertions
+  are written on clear-cut cases for this reason.
+
 ## 7. Client design consequences
 
 - **Model discovery is required**, not optional — it is the only documented way

@@ -461,6 +461,7 @@ resolution used to build serializer options on every typed call.
 | `src/Jev.Sdk.DependencyInjection/` | DI and configuration integration |
 | `tests/Jev.Sdk.Tests/` | 206 tests, no network required |
 | `samples/Jev.Sdk.Sample/` | A minimal console client |
+| `samples/Game/` | Escape the Room: a demo game showing `Choice`, `Score` and `Noul` in one call, with its own tests |
 | `requirements/` | Requirements and locked design decisions |
 | `docs/` | Verified API notes |
 

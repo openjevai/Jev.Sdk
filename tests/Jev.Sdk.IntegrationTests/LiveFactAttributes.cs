@@ -12,13 +12,20 @@
 // A skip is the honest third option. It appears as a skip in the test report, it names the two places
 // a key can come from, and it cannot be mistaken for a passing assertion.
 //
-// xunit v2 has no built-in "skip when" attribute, so this derives from FactAttribute and decides at
-// discovery time. Skip is set after the derived constructor body runs, which is why the attribute
-// takes no constructor argument for it.
-
-using System.Globalization;
+// Both attributes set Skip in their own constructor, which runs after the base constructor has done
+// its work — the supported way to make a skip decision at discovery time in xunit v2. Verified by
+// reflection against xunit.core 2.9.3: FactAttribute is open with a settable Skip, TheoryAttribute is
+// open and inherits it, and InlineDataAttribute is sealed — which is why rows are supplied with the
+// framework's own InlineData rather than a derived attribute.
 
 namespace Jev.Sdk.IntegrationTests;
+
+/// <summary>Reasons a live test skips itself.</summary>
+internal static class SkipReasons
+{
+    /// <summary>The message used when no API key could be resolved.</summary>
+    public static string NoApiKey => $"No live API key configured. {LiveSettings.WhereWeLooked()}";
+}
 
 /// <summary>
 /// A test that calls the live API. Skips itself, with an explanation, when no key is configured.
@@ -31,31 +38,27 @@ public sealed class LiveFactAttribute : FactAttribute
     {
         if (!LiveSettings.IsConfigured)
         {
-            Skip = $"No live API key configured. {LiveSettings.WhereWeLooked()}";
+            Skip = SkipReasons.NoApiKey;
         }
     }
 }
 
 /// <summary>
-/// A live test that runs once per supplied data row. Skips when no key is configured.
+/// A live test that runs once per data row. Skips every row when no key is configured.
 /// </summary>
-/// <param name="args">The data row, passed through to the test method.</param>
+/// <remarks>
+/// Apply this once and supply rows with the framework's own <c>[InlineData(...)]</c>, exactly as a
+/// normal theory works. Deriving a data attribute is not possible here: InlineDataAttribute is sealed.
+/// </remarks>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-public sealed class LiveTheoryAttribute(params object[] args) : TheoryAttribute
+public sealed class LiveTheoryAttribute : TheoryAttribute
 {
-    /// <summary>The data rows this theory feeds to the test.</summary>
-    public object[] Args { get; } = args;
-
-    /// <summary>Returns the row, formatted for the test report.</summary>
-    /// <returns>A readable representation of the row.</returns>
-    public override string ToString()
+    /// <summary>Creates the attribute, skipping the theory when no API key is available.</summary>
+    public LiveTheoryAttribute()
     {
-        // DisplayName is only computed for TheoryAttribute subclasses when this method is overridden;
-        // without it a theory's rows collapse into one indistinguishable name in the report.
-        string rows = string.Join(
-            ", ",
-            Args.Select(a => Convert.ToString(a, CultureInfo.InvariantCulture) ?? "(null)"));
-
-        return $"{GetType().Name}({rows})";
+        if (!LiveSettings.IsConfigured)
+        {
+            Skip = SkipReasons.NoApiKey;
+        }
     }
 }

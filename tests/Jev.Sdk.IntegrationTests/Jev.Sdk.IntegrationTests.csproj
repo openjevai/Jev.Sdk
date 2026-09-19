@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Jev.Sdk/Jev.Sdk.csproj" />
     <ProjectReference Include="../../src/Jev.Sdk.DependencyInjection/Jev.Sdk.DependencyInjection.csproj" />
+    <ProjectReference Include="../../samples/Game/Jev.Sdk.Game/Jev.Sdk.Game.csproj" />
   </ItemGroup>
 
   <ItemGroup>

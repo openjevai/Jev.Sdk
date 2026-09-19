@@ -4,4 +4,6 @@
   <Project Path="tests/Jev.Sdk.Tests/Jev.Sdk.Tests.csproj" />
   <Project Path="tests/Jev.Sdk.IntegrationTests/Jev.Sdk.IntegrationTests.csproj" />
   <Project Path="samples/Jev.Sdk.Sample/Jev.Sdk.Sample.csproj" />
+  <Project Path="samples/Game/Jev.Sdk.Game/Jev.Sdk.Game.csproj" />
+  <Project Path="samples/Game/Jev.Sdk.Game.Tests/Jev.Sdk.Game.Tests.csproj" />
 </Solution>

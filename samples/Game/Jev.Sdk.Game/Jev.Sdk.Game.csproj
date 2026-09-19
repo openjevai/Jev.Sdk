@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Jev.Sdk.Game</RootNamespace>
+    <AssemblyName>Jev.Sdk.Game</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Escape the Room: a demo game built on the Jev.Sdk client.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Jev.Sdk/Jev.Sdk.csproj" />
+    <ProjectReference Include="../../../src/Jev.Sdk.DependencyInjection/Jev.Sdk.DependencyInjection.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="DotNetEnv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The same configuration files the other sample ships, for the same reason: a clone runs
+         as-is, and the documented place to put a key is discoverable without reading the source. -->
+    <None Include="../../Jev.Sdk.Sample/appSettings.json" Link="appSettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="../../Jev.Sdk.Sample/.env.example" Link=".env.example">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
