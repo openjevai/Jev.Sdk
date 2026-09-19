@@ -188,13 +188,32 @@ internal static class Program
     /// configuration exactly the way a real host does — same file names, same machine override,
     /// same precedence. A value that is still the documented placeholder is treated as unset, so
     /// the prompt appears rather than the sample sending "REPLACE ME" to the API.
+    ///
+    /// It also says which file names it looked for. The loader reads exactly two, and a caller who
+    /// created "appsettings.Local.json" from a habitual name would otherwise see only a prompt and
+    /// reasonably conclude the sample was broken rather than that no file it reads exists.
     /// </remarks>
     private static string? KeyFromSettingsFiles()
     {
         try
         {
+            IReadOnlyList<string> candidates =
+                JevConfigurationLoader.CandidateFileNames();
+
             IConfigurationRoot configuration = JevConfigurationLoader.Build(AppContext.BaseDirectory);
             string? key = JevOptionsBinding.FromConfiguration(configuration).ApiKey;
+
+            if (Placeholder.MeansUnset(key))
+            {
+                string present = string.Join(
+                    ", ",
+                    candidates.Where(name => File.Exists(Path.Combine(AppContext.BaseDirectory, name))));
+
+                Console.WriteLine(
+                    present.Length == 0
+                        ? $"No settings file found. Looked for: {string.Join(", ", candidates)}."
+                        : $"Settings files: {present}. No usable Jev:ApiKey in them.");
+            }
 
             return Placeholder.MeansUnset(key) ? null : key;
         }

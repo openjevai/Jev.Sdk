@@ -34,8 +34,14 @@ about it are:
 
 - Prefer the environment variable or a secret store over a settings file. The settings-file
   support exists for convenience on a workstation; a checked-in file is a checked-in credential.
-- `.gitignore` excludes `appsettings.Local.json`, `appsettings.*.Local.json`, `secrets.json`,
-  `*.secrets.json`, `.env`, and `.env.*`.
+- The library reads exactly two settings files: `appSettings.json` and
+  `appSettings.{MACHINE_NAME}.json`. There is no other file name it looks for, so a file called
+  anything else — `appsettings.Local.json`, `config.json`, `appSettings.Development.json` — is
+  simply never read. The machine-specific file is the supported place for a real key on one
+  workstation; name it after the machine, or set `MACHINE_NAME` to make a container's copy work.
+- `.gitignore` excludes `appSettings.json`, `appSettings.{*}.json`, `secrets.json`,
+  `*.secrets.json`, `.env`, and `.env.*`, and re-includes the two shipped templates in
+  `samples/Jev.Sdk.Sample/` by a path-scoped negation.
 - If you use `Jev.Sdk.DependencyInjection`, remember that the machine-specific file
   (`appSettings.{MACHINE_NAME}.json`) takes precedence over the generic one. A file named after
   a container's random hostname is effectively a no-op, which is what the `MACHINE_NAME`
