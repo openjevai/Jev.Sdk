@@ -159,6 +159,30 @@ disagree, because it is the artifact the service validates against. The prose re
 because it carries behavioural guidance the specification omits, because it is what a human reviewer
 reads, and because it is the document the vendor is most likely to edit.
 
+### R3d — Live integration tests
+
+Behaviour the unit suite cannot verify must be verified against the live service.
+
+The unit suite tests the client against a stub, so it confirms only that the client agrees with our model
+of the service. It cannot tell us the model is wrong. `tests/Jev.Sdk.IntegrationTests` exists to test the
+model itself, and is the only project in the repository that calls the real API.
+
+- Live tests **skip** when no API key is configured, naming both places a key can come from. They never
+  fail for a missing key, and never pass without one: a green tick for a call that never happened would
+  report coverage of behaviour that was never exercised.
+- The key comes from the library's own configuration path — `TYPESAFE_API_KEY`, then
+  `appSettings.Local.json` — resolved by passing the machine token `Local` to
+  `JevConfigurationLoader.Build`, so the familiar file name works through the documented machine-override
+  mechanism rather than a special case.
+- A configured value that is still the placeholder `REPLACE ME` counts as not configured, so an
+  unedited copy of the template is harmless.
+- Assertions state behaviour that must hold, and each is written to fail on drift rather than merely on
+  an exception. Where an obvious case exists, it is pinned, so a model that stopped understanding a
+  question is a failure rather than a passing range check.
+
+The suite is deliberately small: it spends real quota, so it detects drift rather than re-testing every
+branch against a paid endpoint.
+
 ### R4 — Structured values
 
 `state`, question `instructions`, Choice option descriptions, Score levels, Noul
@@ -492,6 +516,9 @@ non-breaking; removing one would not be.
 | D31 | Local validation rejects whitespace-only instructions, matching its existing treatment of blank question ids and option names; structured instructions are never treated as blank |
 | D32 | A required, non-nullable member absent from a successful response is a protocol error, not a tolerated empty value; documented best-effort fallbacks (the model-list methods) are the explicit exception |
 | D33 | A defect fix is not complete until every sibling of the same shape is checked; the `models` fix that missed `answers` is the recorded example |
+| D34 | A unit suite confirms the client matches our model of the service; only a live call can reveal the model is wrong, so behaviour the stub cannot verify is verified against the live service |
+| D35 | A live test skips when unconfigured rather than failing or passing; a green result for a call that never happened is worse than a red one |
+| D36 | Where the specification and the live service disagree, the service is the fact and the divergence is recorded in `docs/api-notes.md`; `release_date` is the recorded example |
 
 ---
 

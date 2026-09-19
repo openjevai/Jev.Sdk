@@ -420,3 +420,80 @@ internal sealed class FakeTimeProvider : TimeProvider
 
     internal void Advance(TimeSpan by) => _now = _now.Add(by);
 }
+
+
+/// <summary>
+/// Regressions for the release-date format, found by the live integration suite.
+/// </summary>
+/// <remarks>
+/// The specification's description and example both show <c>YYYY-MM-DD</c>, and every unit test used
+/// that shape, so <c>ParsedReleaseDate</c> passing was never in doubt — against the wrong input. The
+/// live service returns a full ISO-8601 timestamp, so the property returned null for every real model
+/// while the whole unit suite stayed green. These pin both shapes.
+/// </remarks>
+public class ReleaseDateParsingTests
+{
+    [Theory]
+    [InlineData("2026-09-15", 2026, 9, 15)]
+    [InlineData("2026-01-01", 2026, 1, 1)]
+    [InlineData("2019-12-31", 2019, 12, 31)]
+    public void APlainDate_IsParsed(string value, int year, int month, int day)
+    {
+        ModelMetadata model = new() { ReleaseDate = value };
+
+        Assert.Equal(new DateOnly(year, month, day), model.ParsedReleaseDate);
+    }
+
+    [Theory]
+    [InlineData("2026-09-10T18:38:01.391457+00:00", 2026, 9, 10)]
+    [InlineData("2026-09-10T18:38:01+00:00", 2026, 9, 10)]
+    [InlineData("2026-09-10T18:38:01Z", 2026, 9, 10)]
+    [InlineData("2026-09-10T18:38:01", 2026, 9, 10)]
+    public void ALiveTimestamp_IsParsedToItsDateComponent(string value, int year, int month, int day)
+    {
+        // The exact shape the live service sends. This is the regression: it used to return null.
+        ModelMetadata model = new() { ReleaseDate = value };
+
+        Assert.Equal(new DateOnly(year, month, day), model.ParsedReleaseDate);
+    }
+
+    [Fact]
+    public void AnOffsetTimestamp_UsesTheDateInThePayloadNotTheLocalDate()
+    {
+        // A release date is a calendar day. Near midnight, converting to local time would shift the day
+        // for any caller west of UTC, so the payload's own date component is what must be reported.
+        ModelMetadata model = new() { ReleaseDate = "2026-09-10T02:30:00+00:00" };
+
+        Assert.Equal(new DateOnly(2026, 9, 10), model.ParsedReleaseDate);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not a date")]
+    [InlineData("2026-13-45")]
+    public void AnUnreadableValue_ReturnsNullRatherThanThrowing(string value)
+    {
+        // A convenience property should not force a guard on every caller inspecting a model list.
+        ModelMetadata model = new() { ReleaseDate = value };
+
+        Assert.Null(model.ParsedReleaseDate);
+    }
+
+    [Fact]
+    public void ADeserializedLivePayload_ParsesItsReleaseDate()
+    {
+        // The end-to-end shape: the model list as the service sends it, parsed by the library.
+        ModelListResponse response = System.Text.Json.JsonSerializer.Deserialize<ModelListResponse>(
+            """{"models":[{"name":"jev-latest","description":"flagship","release_date":"2026-09-10T18:38:01.391457+00:00"}]}""",
+            JevJsonContext.Default.Options)!;
+
+        ModelMetadata model = response.ModelsOrEmpty[0];
+
+        Assert.Equal(new DateOnly(2026, 9, 10), model.ParsedReleaseDate);
+
+        // The raw value is kept verbatim, so a caller comparing against the API's own output is not
+        // surprised by normalization the library did on its behalf.
+        Assert.Equal("2026-09-10T18:38:01.391457+00:00", model.ReleaseDate);
+    }
+}

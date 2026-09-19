@@ -1,0 +1,20 @@
+{
+  // appSettings.Local.json — put your API key here for the live integration tests.
+  //
+  // This file is git-ignored. It is loaded by the integration test project through the library's own
+  // machine-override mechanism: the project passes the machine token "Local" to
+  // JevConfigurationLoader.Build, which makes the machine-specific candidate resolve to this file
+  // name. The token and the file name are asserted equal by ConfigurationWiringTests.
+  //
+  // The library itself reads exactly two files, appSettings.json and appSettings.{MACHINE_NAME}.json.
+  // This file is the second of those, with MACHINE_NAME set to "Local".
+  //
+  // Replace the placeholder value below with a real key. A value still reading "REPLACE ME" is treated
+  // as not configured, so the live tests skip rather than failing with an authentication error.
+  //
+  // The TYPESAFE_API_KEY environment variable is read first and wins over this file.
+
+  "Jev": {
+    "ApiKey": "REPLACE ME"
+  }
+}

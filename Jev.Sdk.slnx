@@ -2,5 +2,6 @@
   <Project Path="src/Jev.Sdk/Jev.Sdk.csproj" />
   <Project Path="src/Jev.Sdk.DependencyInjection/Jev.Sdk.DependencyInjection.csproj" />
   <Project Path="tests/Jev.Sdk.Tests/Jev.Sdk.Tests.csproj" />
+  <Project Path="tests/Jev.Sdk.IntegrationTests/Jev.Sdk.IntegrationTests.csproj" />
   <Project Path="samples/Jev.Sdk.Sample/Jev.Sdk.Sample.csproj" />
 </Solution>

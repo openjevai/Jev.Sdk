@@ -460,6 +460,56 @@ rejected a blank question id and a blank option name, so this was an inconsisten
 decision. Structured instructions are deliberately still accepted, because an empty JSON object is
 content even though its string view is null.
 
+## 6f. What only the live service revealed
+
+The unit suite tests the client against a stub, so it can only ever confirm that the client agrees with
+what we believe the service sends. A live integration suite was added to test the belief itself, and it
+found two things on its first run.
+
+### The specification documents a `release_date` format the service does not send
+
+The specification declares `release_date` as a string, described as "Model release date, formatted as
+YYYY-MM-DD", with the example `2026-09-15`. Every unit test used that shape, so `ParsedReleaseDate`
+passed every test it had — against input the service never sends.
+
+The live service returns a full ISO-8601 timestamp:
+
+```
+2026-09-10T18:38:01.391457+00:00
+```
+
+So `ParsedReleaseDate`, which only tried `yyyy-MM-dd`, returned **null for every model the service
+actually reports**, while the documentation on the property claimed it parsed "when it is well formed"
+and the whole unit suite stayed green.
+
+`ParsedReleaseDate` now reads both shapes: a plain date, and a timestamp, whose date component is taken
+from the payload's own offset rather than converted to local time — a release date is a calendar day, and
+converting would report the wrong day for a caller west of UTC. `ReleaseDate` itself is still returned
+verbatim, so a caller comparing against the API's own output sees no normalization the library applied
+on their behalf.
+
+This one is worth remembering as a category: a stub confirms the client matches our model of the service.
+It cannot tell us the model is wrong. Only a real call can.
+
+### The resolved model is not in the model list
+
+The first draft of the integration suite asserted that the model named in a response appears in
+`GET /v1/models`. It failed, and the assertion was wrong rather than the library.
+
+`GET /v1/models` advertises **aliases** — on this account, `jev-latest` and `jev-preview`. Those resolve
+server-side to a concrete version, `jev-1.13.0`, which the list does not itself contain:
+
+```
+advertised aliases: jev-latest, jev-preview
+requested 'jev-latest'  -> response model 'jev-1.13.0' | in advertised list: False
+requested 'jev-preview' -> response model 'jev-1.13.0' | in advertised list: False
+requested '(default)'   -> response model 'jev-1.13.0' | in advertised list: False
+```
+
+The library's behaviour is correct: it reports what answered, and the request named an alias. The test now
+asserts the property that actually holds — the requested alias is one the service offers, and every
+advertised alias is accepted — instead of one that merely looked reasonable.
+
 ## 7. Client design consequences
 
 - **Model discovery is required**, not optional — it is the only documented way
