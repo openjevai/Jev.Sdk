@@ -107,6 +107,23 @@ public sealed class JevClientOptions
     public bool ValidateRequests { get; set; } = true;
 
     /// <summary>
+    /// Additional HTTP headers to send with every request.
+    /// </summary>
+    /// <remarks>
+    /// The vendor's SDKs both accept extra request headers, and without an equivalent a caller
+    /// behind a proxy, gateway, or platform that requires its own header could not use this client
+    /// at all. Headers are applied after the library's own, so a caller may override a default such
+    /// as <c>Accept</c>. The <c>Authorization</c> header is always set by the library and cannot be
+    /// replaced from here: a key belongs in <see cref="ApiKey"/>.
+    /// <para>
+    /// Values are sent verbatim. Do not put caller content or a credential in a header, because
+    /// headers are visible in transit logs this library does not control.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> Headers { get; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Optional hook to customise the client's JSON settings. It receives a private copy of the
     /// options, which is then frozen. Leave null to accept the defaults.
     /// </summary>
@@ -196,7 +213,22 @@ public sealed class JevClientOptions
             throw new JevConfigurationException("JevClientOptions.DefaultModel cannot be empty.");
         }
 
-        return new JevClientOptions
+        foreach (KeyValuePair<string, string> header in Headers)
+        {
+            if (string.IsNullOrWhiteSpace(header.Key))
+            {
+                throw new JevConfigurationException("JevClientOptions.Headers cannot contain a blank header name.");
+            }
+
+            if (string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new JevConfigurationException(
+                    "JevClientOptions.Headers cannot set the Authorization header. Supply the key through " +
+                    "JevClientOptions.ApiKey, or an IApiKeyProvider, so it is never held as an ordinary string.");
+            }
+        }
+
+        JevClientOptions copy = new()
         {
             ApiKey = ApiKey,
             BaseAddress = BaseAddress,
@@ -211,5 +243,12 @@ public sealed class JevClientOptions
             ValidateRequests = ValidateRequests,
             ConfigureJson = ConfigureJson,
         };
+
+        foreach (KeyValuePair<string, string> header in Headers)
+        {
+            copy.Headers[header.Key] = header.Value;
+        }
+
+        return copy;
     }
 }

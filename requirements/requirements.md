@@ -71,10 +71,15 @@ Three question kinds, each with its own criteria shape:
 
 ### R4 — Structured values
 
-`state`, question `instructions`, Choice option descriptions, and Score level
-descriptions all accept JSON structure — a string, an object, or an array — not
-just text. The client must support all three shapes on both the request and the
-response side, for `legend` values as well.
+`state`, question `instructions`, Choice option descriptions, Score levels, Noul
+criteria members, and `legend` values all accept JSON structure — a string, an
+object, or an array — not just text. The client supports every shape on both the
+request and the response side.
+
+The full declared footprint is reproduced property by property in
+[docs/api-notes.md](../docs/api-notes.md) section 6b, derived from the live
+OpenAPI specification. A conformance suite exercises each declared shape so that
+an unsupported one fails in the tests rather than in a caller's code.
 
 ### R5 — Caller-owned state
 
@@ -195,6 +200,16 @@ safe to record.
 No dependency on OpenTelemetry or any exporter. No public event or subscription
 surface.
 
+### R11a — Request headers
+
+Callers may supply additional HTTP headers, sent with every request. Both of the
+vendor's SDKs accept extra request headers, and without an equivalent a caller
+behind a proxy or gateway that requires its own header could not use this client at
+all. Caller headers are applied after the library's own, so a default such as
+`Accept` can be overridden. `Authorization` cannot be set this way: attempting it
+is a configuration error, because a credential must arrive through `ApiKey` or an
+`IApiKeyProvider` rather than as an ordinary string.
+
 ### R12 — Extensibility seams
 
 The client's collaborators are interfaces with working defaults, so the library
@@ -304,6 +319,8 @@ non-breaking; removing one would not be.
 | D18 | Repository is local-only. Nothing is written to the Obsidian vault |
 | D19 | Throttling defaults match the vendor's SDKs: 2 retries, 500 ms initial backoff, 5 s backoff ceiling, 60 s Retry-After ceiling, 0.25 subtractive jitter, 10 s per-attempt timeout, retryable set 408/429/5xx |
 | D20 | The vendor's exception surface and request-id are mirrored: distinct types per status, `RequestId` and `Endpoint` on every API exception, and `RequestId` on successful responses |
+| D21 | The full declared type footprint is supported: every permissive `string \| object \| array \| null` member, the map-of-permissive Choice criteria, the array-of-permissive Score levels, the mixed string-or-integer error path, and caller-supplied request headers |
+| D22 | Unmodelled fields are reachable in both directions on every wire model, matching the vendor's `extra_body` escape hatch on the request and exceeding their skip-and-warn behaviour on unknown answer kinds |
 
 ---
 

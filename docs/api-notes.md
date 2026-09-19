@@ -303,6 +303,67 @@ that **request and response bodies are not redacted**. That is a weaker position
 takes: see section 7. Matching their throttle behaviour is worthwhile; matching their body-logging
 behaviour is not.
 
+## 6b. Full declared type footprint
+
+Every property in the specification, with the shape it declares and where this client models it.
+Verified property by property against `components.schemas` in the live specification.
+
+| Schema | Property | Declared type | Modelled as |
+| --- | --- | --- | --- |
+| `SystemOneRequest` | `state` | `string \| object \| array` | `StructuredValue` |
+| | `model` | `string` | `string` |
+| | `questions` | `map<Question>` | `IDictionary<string, Question>` |
+| `NoulQuestion` | `type` | `const "noul"` | `Question.Type` |
+| | `instructions` | `string \| object \| array \| null` | `StructuredValue?` |
+| | `criteria` | `NoulCriteria \| null` | `NoulCriteria?` |
+| `NoulCriteria` | `true`, `false` | `string \| object \| array \| null` | `StructuredValue?` each |
+| `ChoiceQuestion` | `criteria` | `map<string \| object \| array \| null>` | `IDictionary<string, StructuredValue?>` |
+| `ScoreQuestion` | `criteria` | `array<string \| object \| array>` | `IList<StructuredValue>` |
+| `NoulAnswer` | `noul` | `number` | `double` |
+| `ChoiceAnswer` | `choice` | `string` | `string` |
+| | `confidence` | `number` | `double?` on the base |
+| | `probabilities` | `map<number>` | `IDictionary<string, double>` |
+| `ScoreAnswer` | `score` | `number` | `double` |
+| | `legend` | `map<string \| object \| array>` | `IDictionary<string, StructuredValue>` |
+| `SystemOneResponse` | `answers` | `map<Answer>` | `IDictionary<string, Answer>` |
+| | `usage` | `Usage` | `Usage?` |
+| `Usage` | `input_tokens`, `output_tokens` | `integer` | `int` |
+| `ModelMetadataList` | `models` | `array<ModelMetadata>` | `IList<ModelMetadata>` |
+| `ModelMetadata` | `name`, `description`, `release_date` | `string` | `string` each, plus a parsed `DateOnly?` |
+| `HTTPValidationError` | `detail` | `array<ValidationError>` | `IList<ErrorDetails>` |
+| `ValidationError` | `loc` | `array<string \| integer>` | `IList<object>` |
+| | `msg`, `type` | `string` | `string` each |
+| | `input` | *(no declared type)* | `JsonElementBox?` |
+| | `ctx` | `object` | `JsonElementBox?` |
+
+The permissive members are the ones worth naming. `state`, every `instructions`, every Choice option
+description, every Score level, every Noul criteria member, and every `legend` value accept a plain
+string *or* arbitrary JSON. They are all carried as `StructuredValue`, which preserves whichever
+shape arrived rather than flattening it to text, and is exercised in every shape by the conformance
+suite.
+
+**Extension points.** The specification does not declare extension members, but the vendor's SDK
+documentation describes unrecognised fields as a forward-compatibility escape hatch (`extra_body` on
+the request, ignored fields on the response). This client exposes that on both sides:
+`Question.AdditionalProperties`, `SystemOneRequest.AdditionalProperties`, and
+`JevResponse.AdditionalProperties`.
+
+On unknown answer kinds this client is *better* than the vendor's position rather than equal to it.
+Their SDKs log a warning and skip an unrecognised answer kind, leaving the caller to dig it out of a
+raw HTTP response. Here it arrives as an `UnknownAnswer` with its original JSON intact, so no raw
+response is needed and the other answers in the same payload are unaffected.
+
+## 6c. A header the specification does not declare
+
+The specification declares **no response headers on any endpoint**. `x-typesafe-request-id` is
+documented only in the vendor's SDK pages, as `request_id` on results and errors. It is therefore
+inferred from documentation rather than confirmed by the specification, in the same category as the
+401, 429, and 529 status codes noted in section 6.
+
+Both endpoints declare `application/json` for their request and response bodies, and the only
+declared security scheme is `HTTPBearer` with `scheme: bearer`. The specification sets no top-level
+`security` requirement, so bearer auth is documented in prose rather than enforced by the spec.
+
 ## 7. Client design consequences
 
 - **Model discovery is required**, not optional — it is the only documented way

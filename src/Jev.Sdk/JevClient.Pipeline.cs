@@ -69,7 +69,9 @@ public sealed partial class JevClient
                 try
                 {
                     lastResponse = await _transport
-                        .SendAsync(new TransportRequest(method, uri, payload), cancellationToken)
+                        .SendAsync(
+                            new TransportRequest(method, uri, payload, _options.Headers),
+                            cancellationToken)
                         .ConfigureAwait(false);
                 }
                 catch (JevConnectionException) when (retriesPerformed < _options.MaxRetries)

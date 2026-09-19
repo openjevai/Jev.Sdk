@@ -40,6 +40,17 @@ public sealed partial class HttpTypeSafeTransport
 
         message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
+        // Caller-supplied headers go last, so a caller can override one of the library's defaults.
+        // Authorization is set above and is not re-applied here: JevClientOptions rejects an attempt
+        // to set it, so a credential can only arrive through the key provider.
+        if (request.Headers is { Count: > 0 } headers)
+        {
+            foreach (KeyValuePair<string, string> header in headers)
+            {
+                message.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+        }
+
         return message;
     }
 }
