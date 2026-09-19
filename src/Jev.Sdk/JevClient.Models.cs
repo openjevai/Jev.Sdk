@@ -27,8 +27,11 @@ public sealed partial class JevClient
     private const string ModelsPath = "models";
 
     private readonly SemaphoreSlim _modelsGate = new(1, 1);
-    private IReadOnlyList<ModelMetadata>? _cachedModels;
-    private DateTimeOffset _cachedModelsAt;
+
+    // Published as one immutable snapshot rather than as two independent fields. Two separate fields
+    // let a reader observe a new list with a stale timestamp, which reads as a value that is either
+    // already expired or valid for longer than configured, depending on the interleaving.
+    private CacheEntry? _cache;
 
     /// <summary>
     /// Lists the models and aliases available to the authenticated account. This always performs a
@@ -65,9 +68,10 @@ public sealed partial class JevClient
         IReadOnlyList<ModelMetadata> models = response.ModelsOrEmpty;
 
         // A successful fetch refreshes the cache, so a caller mixing this with the cached accessor
-        // does not immediately pay for a second call.
-        _cachedModels = models;
-        _cachedModelsAt = _timeProvider.GetUtcNow();
+        // does not immediately pay for a second call. The entry is published as one reference write,
+        // which is atomic, so a concurrent reader sees either the old snapshot or the new one and never
+        // a mixture of the two.
+        Volatile.Write(ref _cache, new CacheEntry(models, _timeProvider.GetUtcNow()));
 
         return models;
     }
@@ -104,6 +108,8 @@ public sealed partial class JevClient
             return cached;
         }
 
+        // WaitAsync outside a try: if it throws, the gate was never taken, and releasing it in a
+        // finally would raise SemaphoreFullException. Only the acquired path may release.
         await _modelsGate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
@@ -221,11 +227,7 @@ public sealed partial class JevClient
     /// Not usually needed, because the cache expires on its own. It exists for a caller that knows
     /// the server-side list changed, such as after provisioning an account.
     /// </remarks>
-    public void InvalidateModelCache()
-    {
-        _cachedModels = null;
-        _cachedModelsAt = default;
-    }
+    public void InvalidateModelCache() => Volatile.Write(ref _cache, null);
 
     /// <summary>
     /// How long a fetched model list is served before the next cached read refetches. Defaults to
@@ -237,17 +239,28 @@ public sealed partial class JevClient
     {
         models = null;
 
-        if (_options.ModelCacheDuration <= TimeSpan.Zero || _cachedModels is null)
+        if (_options.ModelCacheDuration <= TimeSpan.Zero)
         {
             return false;
         }
 
-        if (_timeProvider.GetUtcNow() - _cachedModelsAt >= _options.ModelCacheDuration)
+        // One atomic read of the whole snapshot, so the list and its timestamp cannot disagree.
+        CacheEntry? entry = Volatile.Read(ref _cache);
+
+        if (entry is null)
         {
             return false;
         }
 
-        models = _cachedModels;
+        if (_timeProvider.GetUtcNow() - entry.FetchedAt >= _options.ModelCacheDuration)
+        {
+            return false;
+        }
+
+        models = entry.Models;
         return true;
     }
+
+    /// <summary>An immutable model-list snapshot with the instant it was fetched.</summary>
+    private sealed record CacheEntry(IReadOnlyList<ModelMetadata> Models, DateTimeOffset FetchedAt);
 }

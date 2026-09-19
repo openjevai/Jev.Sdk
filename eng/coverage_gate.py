@@ -46,7 +46,7 @@ BRANCH_FLOORS = {
 # documented behaviour. Each entry needs a reason, and a reason that would survive review.
 EXEMPT_LINES = {
     "Jev.Sdk/Http/HttpTypeSafeTransport.cs": {
-        192: "HttpClient always supplies a non-null Content on a response; this null check guards against that changing.",
+        195: "HttpClient always supplies a non-null Content on a response; this null check guards against that changing.",
     },
     "Jev.Sdk/Http/HttpTypeSafeTransport.Retry.cs": {
         167: "RetryConditionHeaderValue permits both members to be null, but no code path produces such a header.",

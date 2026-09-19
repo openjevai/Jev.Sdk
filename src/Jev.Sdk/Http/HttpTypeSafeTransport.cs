@@ -40,7 +40,11 @@ public sealed partial class HttpTypeSafeTransport : ITypeSafeTransport, IDisposa
     private readonly IApiKeyProvider _apiKeyProvider;
     private readonly TimeSpan? _timeout;
     private readonly bool _ownsHttpClient;
-    private bool _disposed;
+
+    // 0 = live, 1 = disposed. Interlocked rather than a bool so the check and the transition are one
+    // atomic operation: a plain bool lets two threads both observe "not disposed", or lets a send pass
+    // the check and then run against a client that another thread disposes underneath it.
+    private int _disposed;
 
     /// <summary>Initialises the transport.</summary>
     /// <param name="httpClient">
@@ -82,7 +86,7 @@ public sealed partial class HttpTypeSafeTransport : ITypeSafeTransport, IDisposa
     /// <inheritdoc />
     public async Task<TransportResponse> SendAsync(TransportRequest request, CancellationToken cancellationToken)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(request);
 
         using HttpRequestMessage message = await BuildRequestAsync(request, cancellationToken).ConfigureAwait(false);
@@ -213,12 +217,12 @@ public sealed partial class HttpTypeSafeTransport : ITypeSafeTransport, IDisposa
     /// <inheritdoc />
     public void Dispose()
     {
-        if (_disposed)
+        // Only the thread that performs the 0 -> 1 transition disposes the client. A second concurrent
+        // Dispose is a no-op rather than a double disposal or a race on the field.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return;
         }
-
-        _disposed = true;
 
         if (_ownsHttpClient)
         {

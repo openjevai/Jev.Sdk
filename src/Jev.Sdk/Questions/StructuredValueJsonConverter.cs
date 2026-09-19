@@ -36,8 +36,9 @@ public sealed class StructuredValueJsonConverter : JsonConverter<StructuredValue
             return StructuredValue.Null;
         }
 
+        // The document is disposed at the end of this scope, so the value must own its own copy.
         using JsonDocument document = JsonDocument.ParseValue(ref reader);
-        return StructuredValue.FromJson(document.RootElement);
+        return StructuredValue.FromJsonInPlace(document.RootElement.Clone());
     }
 
     /// <inheritdoc />

@@ -81,15 +81,25 @@ public sealed class StructuredValue
         text is null ? s_null : new StructuredValue(JsonSerializer.SerializeToElement(text), JsonShape.Text);
 
     /// <summary>
-    /// Creates a value from existing JSON. The element is copied, so the source document may
-    /// be disposed afterwards.
+    /// Creates a value from existing JSON, copying the element so the caller may dispose the source
+    /// document afterwards. Use this when the element outlives its document; the deserializer path
+    /// uses <see cref="FromJsonInPlace"/> instead, which avoids the copy.
     /// </summary>
     /// <param name="element">The JSON to hold.</param>
-    public static StructuredValue FromJson(JsonElement element)
-    {
-        JsonElement copy = element.Clone();
+    public static StructuredValue FromJson(JsonElement element) => FromJsonInPlace(element.Clone());
 
-        JsonShape shape = copy.ValueKind switch
+    /// <summary>
+    /// Creates a value that holds <paramref name="element"/> directly, without copying it.
+    /// </summary>
+    /// <param name="element">
+    /// The JSON to hold. Ownership transfers to the value: the element must be backed by memory that
+    /// outlives it. A JsonElement produced by a converter's reader is backed by the caller's buffer or
+    /// by a document the value itself now keeps alive, which is why this is safe on the deserialize
+    /// path and not on the public one.
+    /// </param>
+    internal static StructuredValue FromJsonInPlace(JsonElement element)
+    {
+        JsonShape shape = element.ValueKind switch
         {
             JsonValueKind.Object => JsonShape.Record,
             JsonValueKind.Array => JsonShape.Sequence,
@@ -99,7 +109,7 @@ public sealed class StructuredValue
             _ => JsonShape.Null,
         };
 
-        return shape == JsonShape.Null ? s_null : new StructuredValue(copy, shape);
+        return shape == JsonShape.Null ? s_null : new StructuredValue(element, shape);
     }
 
     /// <summary>

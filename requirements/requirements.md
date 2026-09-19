@@ -272,6 +272,44 @@ The DI package is a convenience layer, not the only route.
 
 ## 4. Cross-Cutting Requirements
 
+### R11b — Thread safety and scalability
+
+A single client instance may be used concurrently by any number of callers.
+
+| Concern | Approach |
+| --- | --- |
+| Model cache | One immutable snapshot published by a single reference write, read atomically. No lock on the hit path. |
+| Cache refresh | A semaphore so N concurrent first reads issue one request. Only the acquired path releases it, so a caller cancelled while queued cannot corrupt the gate. |
+| Disposal | An `Interlocked` transition, so only the thread that wins disposes the owned client. |
+| Serialization | Type-information resolution is cached per caller resolver and response type. A `JsonTypeInfo` is immutable and thread-safe once configured. |
+| Client state | Options are snapshotted and frozen at construction. No mutable per-call state is shared. |
+| Transport | `HttpClient` is designed for concurrent use; the transport adds no lock around send. |
+
+Measured on this machine, one client instance, in-process stub transport: sequential
+throughput 21.7k calls/s at 46 µs per call, scaling to 200k calls/s at 64-way
+concurrency. A bare `HttpClient` performing the same exchange costs 1,112 bytes per
+call; a full `SystemOneAsync` costs roughly 4.6 KB above that, dominated by the
+serialized request, the parsed response dictionary, and the answer union — not by
+client overhead.
+
+Two of the threading changes are **defensive rather than fixes for demonstrated
+defects**, and this is recorded rather than implied:
+
+- The model cache previously wrote its list and its timestamp as two independent
+  fields, so a reader could observe a torn pair. Every consequence is benign — one
+  list served slightly longer than configured, or one harmless extra fetch. A test
+  that reintroduces the race does not fail, because the failure is not observable.
+  The snapshot is kept because it is correct by construction rather than by arguing
+  about which interleavings survive.
+- Disposal previously used a plain bool with a check-then-act. `HttpClient.Dispose`
+  is idempotent and a racing send raises `ObjectDisposedException`, which is a
+  documented outcome. `Interlocked` is still the right shape, but no test here proves
+  a defect existed.
+
+One change is a measured win: binding a response to a caller's own type previously
+built a fresh `JsonSerializerOptions` per response, discarding the serializer's
+metadata cache on every call. That resolution is now cached.
+
 ### R12a — Timeouts
 
 The per-attempt timeout is enforced by the client, not by mutating an
@@ -401,6 +439,8 @@ non-breaking; removing one would not be.
 | D24 | The per-attempt timeout is enforced with a linked cancellation token rather than by assigning `HttpClient.Timeout`, because that property is immutable once a client has served a request and callers legitimately pass pooled or factory-managed clients |
 | D25 | Every converter declares `HandleNull => true`, so a JSON null inside a collection is a value rather than a C# null, and an absent member stays distinguishable from a null one |
 | D26 | Computed members are `[JsonIgnore]`; a serialized response never carries a field the API does not define |
+| D27 | A client instance is safe for concurrent use: no lock on the model-cache hit path, one request per burst of concurrent first reads, atomic disposal, and cached type-information resolution |
+| D28 | Defensive threading changes are labelled as defensive in the requirements; a green test is never presented as proof of a defect that was not observable |
 
 ---
 

@@ -98,6 +98,23 @@ public class ForwardCompatibilityTests
     }
 
     [Fact]
+    public void ANullAnswerToken_IsRejected()
+    {
+        // Null is not an object, and a kind cannot be inferred from it. A clear protocol error beats a
+        // silently null answer.
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<Answer>("null", JevJsonContext.Default.Options));
+    }
+
+    [Fact]
+    public void ANullAnswerValue_SerializesAsJsonNull()
+    {
+        string written = JsonSerializer.Serialize((Answer?)null, JevJsonContext.Default.Options);
+
+        Assert.Equal("null", written);
+    }
+
+    [Fact]
     public void NonObjectAnswer_ThrowsJsonException()
     {
         Assert.Throws<JsonException>(() =>

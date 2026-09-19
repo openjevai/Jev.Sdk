@@ -1,6 +1,6 @@
 // JevTypeInfoComposer.cs
 // Part of Jev.Sdk. This file is one of the partial-class/file set for serialization.
-// See requirements/requirements.md, R5 and R14.
+// See requirements/requirements.md, R5, R14 and R24.
 //
 // Type: JevTypeInfoComposer
 //
@@ -18,32 +18,79 @@
 // Composing the two resolvers is the correct fix — the caller's types win where they exist, and
 // anything they do not declare falls through to the library's own context.
 //
-// Composition is cached per caller resolver type, so it happens once rather than per call.
+// Composition is resolved ONCE per caller resolver instance and cached, and the resulting JsonTypeInfo
+// is cached too. A JsonTypeInfo is immutable and thread-safe once configured, so caching it is both
+// correct and the reason this costs nothing per call. Building fresh options per response — the first
+// version of this — allocated a JsonSerializerOptions on every call and threw away the serializer's
+// own metadata cache each time, which is measurable overhead on a hot path.
 
 using System.Collections.Concurrent;
+using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
 namespace Jev.Sdk;
 
 /// <summary>
-/// Merges a caller-supplied type-info resolver with the library's own.
+/// Merges a caller-supplied type-info resolver with the library's own, and caches the result.
 /// </summary>
 internal static class JevTypeInfoComposer
 {
-    private static readonly ConcurrentDictionary<Type, IJsonTypeInfoResolver> s_merged = new();
+    /// <summary>
+    /// Cache keyed by the caller's resolver instance and the requested type. The resolver is compared
+    /// by reference because a compiled context is a long-lived singleton in practice, which is what
+    /// makes the cache hit on every call after the first.
+    /// </summary>
+    private static readonly ConcurrentDictionary<CacheKey, JsonTypeInfo> s_cache = new();
+
+    private static readonly JsonSerializerOptions s_libraryOnlyOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        TypeInfoResolver = JevJsonContext.Default,
+    };
 
     /// <summary>
-    /// Returns a resolver that consults <paramref name="callerResolver"/> first and the library's own
-    /// context second, so a caller needs to declare only their root type.
+    /// Returns type information that resolves both the caller's root type and the library's own types.
     /// </summary>
-    /// <param name="callerResolver">The caller's resolver, taken from their own context.</param>
-    /// <returns>A composed resolver, cached per caller resolver type.</returns>
-    internal static IJsonTypeInfoResolver ComposeWithLibrary(IJsonTypeInfoResolver callerResolver)
+    /// <param name="callerOptions">The options the caller's type information came from.</param>
+    /// <returns>
+    /// The caller's own type information when there is nothing to merge, otherwise a cached instance
+    /// whose resolver falls through from the caller's to the library's.
+    /// </returns>
+    internal static JsonTypeInfo<TResponse> Resolve<TResponse>(JsonSerializerOptions callerOptions)
     {
-        ArgumentNullException.ThrowIfNull(callerResolver);
+        ArgumentNullException.ThrowIfNull(callerOptions);
 
-        return s_merged.GetOrAdd(
-            callerResolver.GetType(),
-            _ => JsonTypeInfoResolver.Combine(callerResolver, JevJsonContext.Default));
+        IJsonTypeInfoResolver? callerResolver = callerOptions.TypeInfoResolver;
+
+        // The common case: the caller passed no resolver, or one that already resolves everything
+        // because it is the library's own context. Nothing to merge, so the supplied metadata is used
+        // as-is with no lookup at all.
+        if (callerResolver is null or JevJsonContext)
+        {
+            return (JsonTypeInfo<TResponse>)s_libraryOnlyOptions.GetTypeInfo(typeof(TResponse));
+        }
+
+        JsonTypeInfo resolved = s_cache.GetOrAdd(
+            new CacheKey(callerResolver, typeof(TResponse)),
+            key => Build(callerOptions, key));
+
+        return (JsonTypeInfo<TResponse>)resolved;
     }
+
+    private static JsonTypeInfo Build(JsonSerializerOptions callerOptions, CacheKey key)
+    {
+        // One options instance per (resolver, type) pair, built once and cached. A JsonTypeInfo is
+        // bound to the options that produced it, so the options must be owned here rather than created
+        // per call.
+        JsonSerializerOptions merged = new(callerOptions)
+        {
+            TypeInfoResolver = JsonTypeInfoResolver.Combine(
+                callerOptions.TypeInfoResolver!,
+                JevJsonContext.Default),
+        };
+
+        return merged.GetTypeInfo(key.Type);
+    }
+
+    private readonly record struct CacheKey(IJsonTypeInfoResolver Resolver, Type Type);
 }

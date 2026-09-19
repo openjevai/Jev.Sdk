@@ -242,7 +242,7 @@ public sealed partial class JevClient
             // The caller's type information resolves their root type; the library's own context supplies
             // the answer and question unions it references. Without the merge, a caller's model fails on
             // any member typed as the library's own polymorphic types.
-            JsonTypeInfo<TResponse> effectiveTypeInfo = ResolveTypeInfo(responseTypeInfo);
+            JsonTypeInfo<TResponse> effectiveTypeInfo = JevTypeInfoComposer.Resolve<TResponse>(responseTypeInfo.Options);
 
             TResponse? parsed = JsonSerializer.Deserialize(response.Body, effectiveTypeInfo);
 
@@ -320,28 +320,6 @@ public sealed partial class JevClient
                 $"{endpoint} returned {statusCode}: {response.StatusCode}.",
                 body, requestId, endpoint),
         };
-    }
-
-    /// <summary>
-    /// Returns type information that can resolve both the caller's root type and the library's own
-    /// types. When the caller supplied the library's own response type there is nothing to merge.
-    /// </summary>
-    private static JsonTypeInfo<TResponse> ResolveTypeInfo<TResponse>(JsonTypeInfo<TResponse> supplied)
-    {
-        IJsonTypeInfoResolver? resolver = supplied.Options.TypeInfoResolver;
-
-        if (resolver is null)
-        {
-            return supplied;
-        }
-
-        IJsonTypeInfoResolver composed = JevTypeInfoComposer.ComposeWithLibrary(resolver);
-
-        // A JsonTypeInfo is bound to the options that produced it, so the merged resolver is applied to
-        // a copy of those options and the caller's type re-resolved against it.
-        JsonSerializerOptions merged = new(supplied.Options) { TypeInfoResolver = composed };
-
-        return (JsonTypeInfo<TResponse>)merged.GetTypeInfo(typeof(TResponse));
     }
 
     private IReadOnlyList<ErrorDetails> ReadValidationDetails(string? body)
