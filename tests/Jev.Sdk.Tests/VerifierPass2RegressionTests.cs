@@ -7,6 +7,10 @@
 //      dereferenced on the success path, and re-serializing dropped the member entirely even though
 //      the specification declares it required. This was the same defect class already fixed for the
 //      model list, and it was missed for the answers map.
+//      Resolution: the specification marks `model`, `answers` and `usage` required and non-nullable, so a
+//      200 that omits or nulls one is reported as a protocol error (`JevConnectionException` with
+//      IsProtocolError) rather than silently tolerated, and the never-null accessor plus the always-written
+//      wire member make the class of defect unreachable from either direction.
 //   2. MEDIUM — ResolveModelAsync and WarmModelsAsync documented that a fetch failure returns a
 //      fallback rather than throwing, but caught only JevException. The transport is a documented
 //      substitution point, so a host implementation throwing its own type escaped both.
@@ -26,12 +30,36 @@ public class VerifierPass2RegressionTests
 {
     // ---------------------------------------------------------------- 1. null answers
 
-    [Fact]
-    public async Task ANullAnswersMember_DoesNotThrowFromSystemOne()
+    [Theory]
+    [InlineData("""{"model":"m","answers":null,"usage":{"input_tokens":1,"output_tokens":2}}""", "answers")]
+    [InlineData("""{"answers":{"a":{"type":"noul","noul":0.5}},"usage":{"input_tokens":1,"output_tokens":2}}""", "model")]
+    [InlineData("""{"model":"m","answers":{"a":{"type":"noul","noul":0.5}}}""", "usage")]
+    public async Task AMissingOrNullRequiredMember_IsAProtocolError(string body, string member)
     {
-        // Previously a raw NullReferenceException, which is not in the documented failure set.
+        // Previously a raw NullReferenceException for answers, which is not in the documented failure set.
+        // The specification marks model, answers and usage required and non-nullable on this response, so a
+        // 200 that omits or nulls one has not honoured the contract. Reporting a protocol error is the
+        // honest outcome, and it keeps the caller inside the documented failure set.
+        StubTransport transport = new StubTransport().EnqueueJson(body);
+
+        using JevClient client = TestClient.Create(transport);
+
+        Dictionary<string, Question> questions = new(StringComparer.Ordinal) { ["a"] = Question.Noul("is it?") };
+
+        JevConnectionException exception = await Assert.ThrowsAsync<JevConnectionException>(
+            () => client.SystemOneAsync("text", questions, model: null, CancellationToken.None));
+
+        Assert.True(exception.IsProtocolError);
+        Assert.Contains(member, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnEmptyAnswersObject_IsHonouredBecauseTheMemberWasPresent()
+    {
+        // The complementary case, and the reason enforcement is on the member's presence rather than its
+        // emptiness: the server did honour the contract, there is simply nothing to report.
         StubTransport transport = new StubTransport().EnqueueJson(
-            """{"model":"m","answers":null,"usage":{"input_tokens":1,"output_tokens":2}}""");
+            """{"model":"m","answers":{},"usage":{"input_tokens":1,"output_tokens":2}}""");
 
         using JevClient client = TestClient.Create(transport);
 
@@ -39,7 +67,6 @@ public class VerifierPass2RegressionTests
 
         SystemOneResponse response = await client.SystemOneAsync("text", questions, model: null, CancellationToken.None);
 
-        Assert.NotNull(response);
         Assert.Empty(response.AnswersOrEmpty);
     }
 
@@ -154,14 +181,15 @@ public class VerifierPass2RegressionTests
     }
 
     [Fact]
-    public async Task Telemetry_CountsACallWithNoAnswersWithoutFaulting()
+    public async Task Telemetry_ReportsTheAnswerCountWithoutFaulting()
     {
-        // The pipeline reads the answer count for a log message, which was the null dereference.
+        // The pipeline reads the answer count for a log message, which was the null dereference. The
+        // member is now guaranteed non-null by the protocol check, so the log statement cannot fault.
         RecordingLoggerProvider recorder = new();
         ILoggerFactory factory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Trace).AddProvider(recorder));
 
         StubTransport transport = new StubTransport().EnqueueJson(
-            """{"model":"m","answers":null,"usage":{"input_tokens":3,"output_tokens":1}}""");
+            """{"model":"m","answers":{"a":{"type":"noul","noul":0.5}},"usage":{"input_tokens":3,"output_tokens":1}}""");
 
         using JevClient client = TestClient.Create(transport, logger: factory.CreateLogger("test"));
 
@@ -169,7 +197,7 @@ public class VerifierPass2RegressionTests
 
         await client.SystemOneAsync("text", questions, model: null, CancellationToken.None);
 
-        Assert.Contains(recorder.Messages, message => message.Contains("0 answer", StringComparison.Ordinal));
+        Assert.Contains(recorder.Messages, message => message.Contains("1 answer", StringComparison.Ordinal));
     }
 
     // ---------------------------------------------------------------- 2. documented fallback

@@ -246,11 +246,15 @@ public sealed partial class JevClient
 
             TResponse? parsed = JsonSerializer.Deserialize(response.Body, effectiveTypeInfo);
 
-            return parsed ?? throw new JevConnectionException(
+            TResponse result = parsed ?? throw new JevConnectionException(
                 $"{method.Method} {relativePath} returned a null body where an object was expected.",
                 isProtocolError: true,
                 responseBody: response.BodyAsText,
                 requestId: response.RequestId);
+
+            RequireDeclaredMembers(result, method, relativePath, response);
+
+            return result;
         }
         catch (JsonException exception)
         {
@@ -267,6 +271,75 @@ public sealed partial class JevClient
     }
 
     private JevApiException MapErrorResponse(
+        TransportResponse response,
+        HttpMethod method,
+        string relativePath,
+        int attempts)
+    {
+        return MapErrorResponseCore(response, method, relativePath, attempts);
+    }
+
+    /// <summary>
+    /// Enforces the specification's declared required members on a parsed success body.
+    /// </summary>
+    /// <remarks>
+    /// The specification marks <c>model</c>, <c>answers</c> and <c>usage</c> as required and non-nullable
+    /// on the <c>/v1/systemone</c> response. A 200 whose body omits or nulls one of them has not honoured
+    /// the contract the caller was promised, and the honest outcome is a protocol error rather than a
+    /// silently empty value.
+    ///
+    /// This matters most for <c>answers</c>. Nothing here reads a response with no questions, so the
+    /// distinction between "no questions" and "the server failed to answer the questions we sent" is
+    /// real: the first is never requested, the second is a broken response that should not look like a
+    /// successful empty evaluation. Before this check a null <c>answers</c> reached the success-path log
+    /// statement as a null dereference.
+    ///
+    /// <para>
+    /// Scope is deliberately asymmetric, and the asymmetry is a decision rather than an oversight.
+    /// <c>ModelMetadataList.models</c> is also declared required, but the four model-list methods each
+    /// document and implement a benign outcome for an unavailable list, pinned by tests from the first
+    /// verification pass. The library therefore tolerates a null there on purpose: those callers asked a
+    /// best-effort question and were promised a usable answer either way. The SystemOne path promises no
+    /// such tolerance, so it does not get any. A caller's own response model is never inspected.
+    /// </para>
+    /// <para>
+    /// <c>model</c> is tested for emptiness rather than null, because the property is a non-nullable
+    /// <see cref="string"/> initialised to the empty string, so an absent member deserializes to
+    /// <c>""</c> rather than null. The alternative — making the property nullable so absence is
+    /// detectable directly — would force a null check on every caller for a case that cannot occur
+    /// through this client, which is a worse trade than treating an empty model name as the protocol
+    /// violation it is. A server that answered a request but declined to say which model answered has
+    /// not honoured the contract either way.
+    /// </para>
+    /// </remarks>
+    private static void RequireDeclaredMembers<TResponse>(
+        TResponse result,
+        HttpMethod method,
+        string relativePath,
+        TransportResponse response)
+    {
+        string? offendingMember = result switch
+        {
+            SystemOneResponse systemOne when string.IsNullOrEmpty(systemOne.Model) => "model",
+            SystemOneResponse systemOne when systemOne.Answers is null => "answers",
+            SystemOneResponse systemOne when systemOne.Usage is null => "usage",
+            _ => null,
+        };
+
+        if (offendingMember is null)
+        {
+            return;
+        }
+
+        throw new JevConnectionException(
+            $"{method.Method} {relativePath} returned {response.StatusCode} without the required '{offendingMember}' member, "
+            + "which the API specification declares present on every successful response.",
+            isProtocolError: true,
+            responseBody: response.BodyAsText,
+            requestId: response.RequestId);
+    }
+
+    private JevApiException MapErrorResponseCore(
         TransportResponse response,
         HttpMethod method,
         string relativePath,

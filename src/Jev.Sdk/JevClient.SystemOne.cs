@@ -38,7 +38,11 @@ public sealed partial class JevClient
     /// <exception cref="JevValidationException">The API rejected the request body.</exception>
     /// <exception cref="JevRateLimitException">The rate limit is still in force after retries.</exception>
     /// <exception cref="JevOverloadedException">The service is still overloaded after retries.</exception>
-    /// <exception cref="JevConnectionException">The exchange failed, or the response was unreadable.</exception>
+    /// <exception cref="JevConnectionException">
+    /// The exchange failed, the response was unreadable, or a successful response omitted a member the
+    /// specification declares required. Check <see cref="JevConnectionException.IsProtocolError"/> to tell
+    /// a contract violation apart from a connection failure.
+    /// </exception>
     /// <exception cref="OperationCanceledException">Cancellation was requested.</exception>
     public Task<SystemOneResponse> SystemOneAsync(
         StructuredValue? state,
@@ -152,7 +156,12 @@ public sealed partial class JevClient
     /// </remarks>
     /// <exception cref="JevRequestValidationException">The request is locally invalid.</exception>
     /// <exception cref="JevConfigurationException">No API key is available.</exception>
-    /// <exception cref="JevConnectionException">The exchange failed, or the response could not be read as your type.</exception>
+    /// <exception cref="JevConnectionException">
+    /// The exchange failed, the response could not be read as your type, or a successful response omitted
+    /// a member the specification declares required. Check
+    /// <see cref="JevConnectionException.IsProtocolError"/> to tell a contract violation apart from a
+    /// connection failure.
+    /// </exception>
     /// <exception cref="OperationCanceledException">Cancellation was requested.</exception>
     public Task<TResponse> SystemOneAsync<TResponse>(
         StructuredValue? state,

@@ -426,6 +426,26 @@ This is precisely the defect fixed for `ModelListResponse.Models` one commit ear
 missed for `answers`. The lesson is that a guard written for one nullable member should be applied by
 searching for every member of the same shape, not by fixing the one that was reported.
 
+**Resolved on the contract, not by tolerance.** The first attempt at the fix returned normally with an
+empty answer map. That was wrong, and worth recording because it was a plausible-looking
+half-measure. The specification marks `model`, `answers` and `usage` as **required and non-nullable**
+on `SystemOneResponse`, and the library already documents that a body which cannot be honoured
+surfaces as `JevConnectionException` with `IsProtocolError` — the same treatment it gives an empty or
+non-JSON body. Returning an empty map instead made that documented contract false, and it also erased
+a distinction that matters: this client refuses to send a request with no questions, so "empty
+answers" can only ever mean the server failed to answer the questions that *were* sent. Reporting a
+protocol error is the honest outcome.
+
+The one asymmetry, recorded deliberately: `ModelMetadataList.models` is also declared required, but
+the four model-list methods each document and implement a benign fallback for an unavailable list,
+pinned by tests from the first verification pass. Those callers asked a best-effort question and were
+promised a usable answer either way, so the tolerance stays there on purpose. The SystemOne path
+promises no such tolerance, so it gets none.
+
+`model` is tested for emptiness rather than null, because the property is a non-nullable string
+initialised to `""`, so an absent member deserializes to `""`. Making it nullable would force a null
+check on every caller for a case that cannot occur through this client.
+
 **MEDIUM — two methods documented a fallback they did not always provide.** `ResolveModelAsync` and
 `WarmModelsAsync` are documented as returning a value rather than throwing when a listing fails, but
 caught only `JevException`. The transport is a documented substitution point, so a host implementation

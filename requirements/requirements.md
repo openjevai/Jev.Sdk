@@ -120,10 +120,21 @@ still be written on serialization.
 
 Two members have this shape and both are handled the same way now:
 
-| Member | Never-null read | Wire behaviour |
-| --- | --- | --- |
-| `ModelListResponse.Models` | `ModelsOrEmpty` | written from the nullable view |
-| `SystemOneResponse.Answers` | `AnswersOrEmpty` | written from `AnswersForWire`, so a required member is always emitted |
+| Member | Never-null read | Wire behaviour | Absence on a 200 |
+| --- | --- | --- | --- |
+| `ModelListResponse.Models` | `ModelsOrEmpty` | written from the nullable view | tolerated: the model methods document a benign fallback |
+| `SystemOneResponse.Answers` | `AnswersOrEmpty` | written from `AnswersForWire`, so a required member is always emitted | protocol error |
+
+Members the specification declares **required and non-nullable** are enforced on a successful response:
+a 200 that omits or nulls one is reported as `JevConnectionException` with `IsProtocolError: true`,
+which is the same treatment an empty or non-JSON body already receives. This client never sends a
+request with no questions, so an empty answer map can only mean the server did not answer the
+questions that were sent — a contract violation, not an empty result. The model-list path is the one
+documented exception, because those methods promise a usable answer either way.
+
+`model` is checked for emptiness rather than null, because the property is a non-nullable string
+initialised to `""`, so an absent member deserializes to `""`. A nullable property would push a null
+check onto every caller for a case that cannot occur through this client.
 
 The rule exists because a null from either produced a failure outside the documented set. For
 `answers` it was worse than an exception: because `WhenWritingNull` is in force, re-serializing a
@@ -479,6 +490,8 @@ non-breaking; removing one would not be.
 | D29 | Every member the API may null has a never-null read accessor and a wire view that always emits it; a null wire member is never the reason a call fails outside the documented exception set |
 | D30 | Methods documented to fall back rather than throw catch every non-cancellation exception, not only `JevException`, because the transport is a documented substitution point |
 | D31 | Local validation rejects whitespace-only instructions, matching its existing treatment of blank question ids and option names; structured instructions are never treated as blank |
+| D32 | A required, non-nullable member absent from a successful response is a protocol error, not a tolerated empty value; documented best-effort fallbacks (the model-list methods) are the explicit exception |
+| D33 | A defect fix is not complete until every sibling of the same shape is checked; the `models` fix that missed `answers` is the recorded example |
 
 ---
 
