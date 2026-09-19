@@ -1,0 +1,299 @@
+# Jev.Sdk — Requirements & Design Decisions
+
+Status: **discussion phase, not signed off**
+Created: 2026-09-18
+Scope: a .NET client library for the TypeSafe AI System One API.
+
+This document records the agreed requirements and locked decisions for the
+`Jev.Sdk` client library, plus the items still open. It is the source of truth
+for what the library must do and why.
+
+---
+
+## 1. Purpose
+
+Build a .NET client for the TypeSafe AI System One API
+(`https://api.typesafe.ai`). The API evaluates a `state` against a map of typed
+`questions` and returns structured `answers`, one per question.
+
+Two official SDKs exist (Python, JavaScript/TypeScript). No official .NET SDK
+exists. Two independent community .NET clients were found during discovery;
+neither is affiliated with TypeSafe AI. This project is an independent client.
+
+---
+
+## 2. Scope
+
+**In scope**
+
+- `POST /v1/systemone` — the evaluation endpoint.
+- `GET /v1/models` — model and alias discovery. (Documented in the OpenAPI spec
+  but absent from `api.md`; it is required to discover models.)
+- The three question kinds (`noul`, `choice`, `score`) and their three answer
+  kinds.
+- Typed error mapping for 401, 422, 429, and 529.
+- Retry with exponential backoff and `Retry-After` handling.
+- BCL telemetry (logging, tracing, metrics).
+- Optional dependency-injection integration in a separate package.
+
+**Out of scope**
+
+- Anything requiring an account, billing, or management API — none is documented.
+- Streaming. The API is request/response; there is no event feed to subscribe to.
+- Any second API version. Only `v1` was observed.
+
+---
+
+## 3. Functional Requirements
+
+### R1 — Evaluation
+
+`SystemOneAsync` sends a state and a named map of questions, and returns the
+answers keyed by the caller's own question ids. Answer ids must survive
+round-trip byte-identical; the client must not normalise, re-case, or rewrite
+question keys.
+
+### R2 — Model discovery
+
+The client exposes model listing so callers can discover available model names
+and aliases rather than hardcoding `jev-latest`. Returns model name, description,
+and release date.
+
+### R3 — Question types
+
+Three question kinds, each with its own criteria shape:
+
+| Kind | `criteria` shape | Answer carries |
+| --- | --- | --- |
+| `noul` | optional `{ true, false }` descriptions | `noul` probability only — **no confidence** |
+| `choice` | required map of option → description-or-null | `choice`, `probabilities`, `confidence` |
+| `score` | required ordered array of level descriptions | `score`, `legend`, `probabilities`, `confidence` |
+
+### R4 — Structured values
+
+`state`, question `instructions`, Choice option descriptions, and Score level
+descriptions all accept JSON structure — a string, an object, or an array — not
+just text. The client must support all three shapes on both the request and the
+response side, for `legend` values as well.
+
+### R5 — Caller-owned state
+
+Callers must be able to pass their own strongly typed state object and have it
+serialize without the library reflecting over their types. Required for trimming
+and Native AOT.
+
+### R6 — Forward compatibility
+
+An unknown question or answer `type` must not fail the response. Unmodelled
+fields must be preserved and reachable, and a new answer kind must not affect the
+other answers in the same payload.
+
+### R7 — Error mapping
+
+| Status | Surface |
+| --- | --- |
+| 401 | authentication failure |
+| 422 | validation failure, with per-field details (`loc`, `msg`, `type`) |
+| 429 | rate limited, with `Retry-After` when present |
+| 529 | service overloaded |
+
+A malformed or unparseable response body is a protocol error, distinct from a
+422 validation failure.
+
+### R8 — Retries
+
+429 and 529 are retried with exponential backoff and jitter, bounded by an
+attempt cap, honouring `Retry-After` when present. 401 and 422 are never retried.
+Retry delay must be cancellable.
+
+### R9 — Client-side validation
+
+Fail fast, before any network call, on: missing required fields, a Score with
+fewer than two levels, an empty question map, and a missing API key. A failure of
+this kind must not be reported as a server error.
+
+### R10 — Configuration
+
+API key resolution, highest priority first:
+
+1. API key passed to the constructor or set in options — optional; its absence is normal, not an error.
+2. `TYPESAFE_API_KEY` environment variable.
+3. `appSettings.{MACHINE_NAME}.json`.
+4. `appSettings.json`.
+5. None present → configuration exception at construction, naming the sources checked.
+
+Environment beats every file. Machine-specific beats generic. If a file is used,
+it is read once at host startup and never watched for changes.
+
+### R11 — Telemetry
+
+The library emits BCL telemetry only:
+
+- `ILogger<T>`, constructor-injected, optional, silent when absent.
+- `ActivitySource` — one span per evaluation call, carrying model, question
+  counts, status, retry count, and token usage.
+- `Meter` — call counts by outcome, retry counts, call duration, and token
+  consumption.
+
+No dependency on OpenTelemetry or any exporter. No public event or subscription
+surface.
+
+### R12 — Extensibility seams
+
+The client's collaborators are interfaces with working defaults, so the library
+is testable and replaceable without the DI package:
+
+| Seam | Default |
+| --- | --- |
+| `ITypeSafeTransport` | the built-in HTTP implementation |
+| `IApiKeyProvider` | the priority ladder above |
+| `ILogger<T>` | none (silent) |
+
+Callers may construct the client with defaults, or inject any seam explicitly.
+The DI package is a convenience layer, not the only route.
+
+---
+
+## 4. Cross-Cutting Requirements
+
+### R13 — Asynchronous I/O only
+
+- Every public I/O method returns `Task<T>` and accepts a `CancellationToken`.
+- The token is honoured through every await, **including retry delays**.
+- No synchronous counterparts and no sync wrappers. Exactly one way to call.
+- No sync-over-async anywhere: no `.Result`, no `.Wait()`, no `GetAwaiter().GetResult()`.
+- No streams, no `IAsyncEnumerable`, no lazy sequences returned to callers.
+- The core library performs **no file-system I/O**. Its only I/O is network.
+- File-based configuration is loaded by the DI package at host startup, never
+  inside the client constructor. A constructor cannot `await`, and a synchronous
+  file read there would violate this requirement.
+
+### R14 — Serialization
+
+- `System.Text.Json`, with source generation (`JsonSerializerContext`).
+- `JsonSerializerOptions` is created once and frozen. It is never created per
+  call and never exposed by reference.
+- snake_case property naming.
+- `DictionaryKeyPolicy` is deliberately **left null**, so question ids pass
+  through unmodified. Any dictionary-key policy would silently rewrite caller
+  ids and lose answers.
+- Serialization is synchronous and CPU-bound; only network I/O is async.
+- Deserialization reads from the response stream asynchronously.
+- No reflection-based serialization fallback; analyzers flag it as an error.
+
+### R15 — JSON customisation
+
+Customisation is available but off by default. The client works with no
+configuration hook at all. When supplied, the hook is applied to a private copy
+of the options at construction and then frozen.
+
+### R16 — Target framework
+
+`net10.0` only. No multi-targeting. Adding a second target later is additive and
+non-breaking; removing one would not be.
+
+### R17 — Project structure and file discipline
+
+- Decompose by function first: one type per concern, one concern per file.
+- When a single type is still too large, split it into partial classes along its
+  functional sub-areas — never arbitrarily and never mid-method.
+- Every type split across files carries a header comment listing all of its
+  partials, so the type is discoverable from any one file.
+- No file may exceed **100 KB**. This is a CI-enforced ceiling.
+- Working targets, which will bind long before the ceiling: **400 lines soft,
+  800 lines hard**.
+
+### R18 — Naming
+
+- Root namespace and package id: `Jev.Sdk`.
+- DI package: `Jev.Sdk.DependencyInjection`.
+- Acronyms of three or more letters are Pascal-cased, per .NET convention:
+  `Sdk`, not `SDK`.
+- Async methods take the `Async` suffix. The `CancellationToken` parameter is
+  **required** — no default value — so cancellation is non-optional at every
+  call site.
+
+### R19 — Security and redaction
+
+- The `state` value is caller content and may be sensitive or regulated. It is
+  never logged, never used as a metric tag, and never attached to a span, at any
+  level.
+- The API key is never logged and the authorization header is always redacted.
+- Metric tags are bounded. Question ids never become metric tags.
+
+---
+
+## 5. Locked Decisions
+
+| # | Decision |
+| --- | --- |
+| D1 | Root namespace and package id: `Jev.Sdk` |
+| D2 | Async methods suffixed `Async`; `CancellationToken` required, no default |
+| D3 | CancellationToken honoured through every await, including retry delay |
+| D4 | Partial classes by function, then by size; header comment lists partials; 100 KB CI ceiling |
+| D5 | All I/O asynchronous; no sync surface, no sync-over-async, no file I/O in the core |
+| D6 | Serialization: System.Text.Json, source-generated, frozen options |
+| D7 | JSON customisation available, off by default |
+| D8 | Telemetry: BCL only — `ILogger`, `ActivitySource`, `Meter` |
+| D9 | Works out of the box: env-resolved key, sensible defaults, built-in retry |
+| D10 | API key: `TYPESAFE_API_KEY`, loaded once, never watched |
+| D11 | Key priority: explicit > environment > machine file > generic file |
+| D12 | Constructor accepts an optional API key |
+| D13 | File-based configuration is loaded by the DI package at host startup |
+| D14 | Core seams are interfaces with built-in defaults |
+| D15 | Target framework: `net10.0` only |
+| D16 | Test framework: xunit (latest v3 line), pending a package-set verification probe |
+| D17 | Licence: MIT |
+| D18 | Repository is local-only. Nothing is written to the Obsidian vault |
+
+---
+
+## 6. Testing Requirements
+
+### R20 — Test structure
+
+- xunit, latest v3 line. Package set to be verified by a scratch restore before
+  it is written into the project files.
+- `Microsoft.NET.Test.Sdk` for `dotnet test` support, if v3 does not supply its
+  own runner wiring.
+- No mocking framework. Test doubles are hand-written stubs of the client's own
+  seams; a stub of `ITypeSafeTransport` makes the entire client testable.
+- No assertion library. Built-in asserts only.
+- The unit suite performs **no network I/O** and requires **no live credentials**.
+- Live tests against `api.typesafe.ai` live in a separate project, are explicitly
+  tagged, and are skipped when no API key is present.
+
+### R21 — What must be tested
+
+- Wire shape: captured real payloads asserted byte-for-byte through the
+  source-generated serialization path.
+- Question id round-trip: ids survive unmodified, including mixed case.
+- Union handling: all three kinds in one payload; an unknown kind falls back
+  without failing the response.
+- Retry behaviour: deterministic 429/529 sequences, `Retry-After` honoured,
+  backoff cancellable.
+- Error mapping: 401, 422, 429, 529, and malformed-body-as-protocol-error.
+- Validation: each fail-fast case, asserted to occur before any request is sent.
+- Configuration precedence: all four sources and their order, plus the
+  none-present failure.
+- Redaction: the `state` value never reaches a log, span, or metric tag.
+
+---
+
+## 7. Open Items
+
+| # | Item | Recommendation |
+| --- | --- | --- |
+| O1 | JSON section name for file configuration: `Jev:ApiKey` vs flat `ApiKey` | `Jev:ApiKey` — namespaced sections avoid collision in a host's shared config |
+| O2 | Machine token source: `Environment.MachineName` vs a `MACHINE_NAME` env override | Use the env override when set, else `Environment.MachineName`; container hostnames are random per start, so the override keeps containers workable |
+| O3 | Exception type naming: `TypeSafe*` vs `Jev*` now that the namespace is `Jev.Sdk` | `Jev*`, for consistency with the namespace |
+| O4 | xunit v3 exact package set for a `net10.0` test project | Verify with a scratch restore before use |
+| O5 | NuGet publication | Build publish-ready (metadata, XML docs as errors, public-API baseline, SemVer from 0.1.0); do not publish |
+
+---
+
+## 8. Verified API Facts
+
+See [../docs/api-notes.md](../docs/api-notes.md) for the wire-level reference,
+including the four places where the published documentation and the live OpenAPI
+specification disagree.

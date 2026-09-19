@@ -1,0 +1,319 @@
+# TypeSafe System One API — verified notes
+
+These notes were verified against the live service, not copied from prose.
+
+Sources:
+
+- `https://docs.typesafe.ai/api.md` — the published API reference
+- `https://api.typesafe.ai/openapi.json` — the live OpenAPI specification,
+  retrieved with HTTP 200. Title `TypeSafe`, version `0.2.0`, OpenAPI 3.1.0.
+- `https://docs.typesafe.ai/llms.txt` — the documentation index
+
+Where the two disagree, the **OpenAPI specification is authoritative**; the
+discrepancies are listed in section 6.
+
+---
+
+## 1. Endpoints
+
+The specification defines exactly two paths:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/systemone` | Evaluate a state against typed questions |
+| `GET` | `/v1/models` | List available models and aliases |
+
+Neither path declares server parameters. Authentication is HTTP bearer
+(`components.securitySchemes.HTTPBearer`), though the specification declares no
+top-level `security` requirement — bearer auth is documented in prose, not
+enforced by the spec.
+
+```
+POST https://api.typesafe.ai/v1/systemone
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+```
+
+Base URL for the client: `https://api.typesafe.ai/v1`.
+
+### Response codes declared by the specification
+
+`POST /v1/systemone` declares only `200` and `422`. `401`, `429`, and `529` are
+**documented in prose only** and are absent from the specification. Any
+client-side handling of those three is therefore inferred from documentation and
+has not been verified against live behaviour.
+
+---
+
+## 2. Request
+
+```
+SystemOneRequest
+  state      required   string | object | array
+  model      required   string            (e.g. "jev-latest")
+  questions  required   object            minProperties: 1
+                        additionalProperties -> Question
+```
+
+`state` accepts a string for plain text, or an object/array carrying structured
+context — conversation history, records, or application state.
+
+Question map keys are chosen by the caller, are returned as-is in the response,
+and are **not** sent to the model and **not** used in inference.
+
+---
+
+## 3. Questions
+
+`Question` is a `oneOf` discriminated on the `type` property:
+
+| `type` | Required | Optional |
+| --- | --- | --- |
+| `noul` | `type` | `instructions`, `criteria` |
+| `choice` | `type`, `criteria` | `instructions` |
+| `score` | `type`, `criteria` | `instructions` |
+
+### Instructions
+
+Wherever `instructions` appears, its type is
+`string | object | array | null`. In the specification it is **optional on all
+three kinds**. `api.md` states it is required. See section 6.
+
+### Noul
+
+```json
+{
+  "type": "noul",
+  "instructions": "Does this convey urgency?",
+  "criteria": { "true": "Explicitly time-sensitive", "false": "No urgency expressed" }
+}
+```
+
+`criteria` is optional and clarifies what counts as yes and no. Both members
+accept `string | object | array | null`.
+
+### Choice
+
+```json
+{
+  "type": "choice",
+  "instructions": "Which team should handle this?",
+  "criteria": {
+    "billing": "Payments, invoicing, refunds",
+    "technical": "Bugs, outages, integrations",
+    "sales": null
+  }
+}
+```
+
+`criteria` is a map of option → description, each value
+`string | object | array | null`. A null description means the option is
+interpreted by its name alone.
+
+### Score
+
+```json
+{
+  "type": "score",
+  "instructions": "How frustrated is the customer?",
+  "criteria": ["Calm", "Frustrated", "Very angry"]
+}
+```
+
+`criteria` is an ordered array; each item is `string | object | array`. Position
+determines the level, starting at zero. The specification sets `minItems: 1`;
+prose says "at least two levels".
+
+---
+
+## 4. Response
+
+```
+SystemOneResponse
+  model    required   string
+  answers  required   object   additionalProperties -> Answer
+  usage    required   Usage  { input_tokens: int, output_tokens: int }
+```
+
+`model` may differ from the alias supplied in the request — for example, an alias
+such as `jev-latest` may resolve to a dated model name. `output_tokens` are
+currently not billed.
+
+`Answer` is a `oneOf` discriminated on `type`, mirroring the question kind.
+
+### Noul answer
+
+```json
+{ "type": "noul", "noul": 0.92 }
+```
+
+`noul` is the probability of yes, from 0 to 1. **A Noul answer has no
+`confidence` member** — deliberately, rather than a zero that could be mistaken
+for a real value. Do not synthesise one.
+
+### Choice answer
+
+```json
+{
+  "type": "choice",
+  "choice": "technical",
+  "probabilities": { "billing": 0.08, "technical": 0.85, "sales": 0.07 },
+  "confidence": 0.82
+}
+```
+
+Required: `choice`, `confidence`, `probabilities`.
+
+### Score answer
+
+```json
+{
+  "type": "score",
+  "score": 1.6,
+  "legend": { "0": "Calm", "1": "Frustrated", "2": "Very angry" },
+  "probabilities": { "0": 0.05, "1": 0.3, "2": 0.65 },
+  "confidence": 0.78
+}
+```
+
+Required: `score`, `confidence`, `legend`, `probabilities`.
+
+`score` is the probability-weighted average of the levels and **may fall between
+integers**. Do not round it.
+
+`legend` values are typed `string | object | array` in the specification, even
+though the example shows plain strings.
+
+`probabilities` keys are level indices **as strings** (e.g. `"0"`, `"1"`),
+matching the `legend` keys.
+
+### Confidence
+
+Both Choice and Score answers carry `confidence`, a 0–1 value derived from the
+shape of the probability distribution — concentrated means confident, flat means
+uncertain. The value is reported verbatim and is never recomputed client-side.
+Noul answers carry none.
+
+---
+
+## 5. Errors
+
+| Status | Meaning | Retry? |
+| --- | --- | --- |
+| `401` | Missing or invalid API key | No |
+| `422` | Request validation failure | No |
+| `429` | Rate limit exceeded | Yes, with backoff |
+| `529` | Service temporarily overloaded | Yes, with backoff |
+
+The `422` body shape:
+
+```
+{ "detail": [ { "loc": [string|int], "msg": string, "type": string, "input": any, "ctx": object } ] }
+```
+
+`loc` is the path to the offending value — request location followed by field
+names and array indices, e.g. `["body", "questions", "urgency", "score", "criteria"]`.
+Only `loc`, `msg`, and `type` are required.
+
+Retry guidance: use exponential backoff for `429` and `529`; do not retry
+immediately.
+
+---
+
+## 6. Where the documentation and the specification disagree
+
+Four discrepancies were found by comparing `api.md` against the live
+specification. In each case the specification wins.
+
+1. **`GET /v1/models` is undocumented in prose.** It exists in the
+   specification and is the only way to discover model names. `api.md` says only
+   to use `"jev-latest"`. A client needs this endpoint.
+
+2. **`instructions` required vs optional.** `api.md` marks it required on all
+   three question kinds. The specification requires it on none of them — Noul
+   requires only `type`; Choice and Score require only `type` and `criteria`.
+   The server therefore accepts an instruction-less question. The client should
+   still require it, to fail fast with a useful error rather than send a question
+   that produces a confusing result.
+
+3. **Score level count.** Prose says "at least two levels"; the specification
+   says `minItems: 1`. A single-level Score returns a constant and is a caller
+   bug. The client should validate a minimum of two.
+
+4. **`legend` value type.** `api.md` types legend values as `map<string,string>`;
+   the specification types them `string | object | array`. Model them permissively.
+
+---
+
+## 7. Client design consequences
+
+- **Model discovery is required**, not optional — it is the only documented way
+  to learn what models exist.
+- **`DictionaryKeyPolicy` must be null** in the serializer. Question ids are
+  dictionary keys; a snake_case key policy would rewrite a caller's `isUrgent`
+  to `is_urgent` and the answer would return under a key the caller never used.
+  This is a silent, data-losing failure mode.
+- **Union deserialization must tolerate unknown discriminators.** TypeSafe will
+  add a fourth question kind. The default `System.Text.Json` polymorphic
+  behaviour throws on an unknown discriminator, which would fail the entire
+  response because of one new kind. Fall back to the nearest ancestor and
+  capture unmodelled fields.
+- **Numbers stay `double`.** `noul`, `score`, `confidence`, and all
+  probabilities. Never round, never convert to `decimal`, never recompute
+  confidence.
+- **The `state` value is sensitive by default.** It is caller content — support
+  tickets, customer messages, possibly regulated data. Never logged, never a
+  metric tag, never attached to a span.
+
+---
+
+## 8. Model information
+
+`GET /v1/models` returns:
+
+```
+ModelMetadataList
+  models  required  array of ModelMetadata
+    name          string   e.g. "jev-latest"
+    description   string
+    release_date  string   YYYY-MM-DD, e.g. "2026-09-15"
+```
+
+---
+
+## 9. Existing clients
+
+| Language | Package | Affiliation |
+| --- | --- | --- |
+| Python | `typesafe-sdk` | Official |
+| JavaScript / TypeScript | `@typesafe-ai/sdk` | Official |
+| .NET | `TypeSafe.Sdk` 0.1.0-alpha.2 — github.com/saibimajdi/typesafeai-dotnet-sdk | Community, unaffiliated |
+| .NET | `TypeSafeAI` 0.2.0 — github.com/Hawxy/TypeSafeAI.Net | Community, unaffiliated |
+
+Neither .NET client is affiliated with TypeSafe AI. This project (`Jev.Sdk`) is
+likewise independent. The `Jev.Sdk`, `Jev.Sdk.DependencyInjection`, and `Jev`
+package ids were verified as unclaimed on nuget.org.
+
+Both official SDKs read the API key from `TYPESAFE_API_KEY`, which is the reason
+this client uses the same variable name.
+
+---
+
+## 10. Vendor guidance worth following
+
+TypeSafe publishes an agent skill at `github.com/typesafe-ai/skills` describing
+how they intend workflows to be built. The points that shape a client's API:
+
+- Send many questions in one request, including speculative ones whose answers
+  only matter for some inputs — they are evaluated in parallel and adding
+  questions barely changes latency. This is why the client takes a map of
+  questions rather than one at a time.
+- Ask for one snap judgment per question. A question that needs slow reasoning
+  should be broken into several questions combined in calling code.
+- Questions within one request are independent; a question cannot reference
+  another's answer. Genuine dependencies need a second request.
+- Prefer the question kind whose answer the calling code can act on directly.
+- Confidence is meant for gating: the answer says what, the confidence says
+  whether to act on it.
+- The request token budget is roughly 32,000 tokens, shared between state and
+  questions.
