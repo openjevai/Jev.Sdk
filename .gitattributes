@@ -1,0 +1,9 @@
+# Normalise line endings on checkout and commit, so a Windows checkout does not rewrite
+# every file in the repository.
+* text=auto eol=lf
+
+# Binary artefacts are never line-ending normalised.
+*.nupkg binary
+*.snupkg binary
+*.png binary
+*.ico binary

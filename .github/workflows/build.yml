@@ -1,0 +1,70 @@
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  CI: true
+
+jobs:
+  build:
+    name: Build, test, and pack
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Jev.Sdk.slnx
+
+      - name: Build
+        run: dotnet build Jev.Sdk.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test Jev.Sdk.slnx --configuration Release --no-build
+             --collect:"XPlat Code Coverage"
+             --results-directory ./artifacts/test-results
+
+      - name: Pack
+        run: dotnet pack Jev.Sdk.slnx --configuration Release --no-build
+             --output ./artifacts/packages
+
+      - name: Report package contents
+        run: |
+          echo "### NuGet packages produced" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -la ./artifacts/packages >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload NuGet packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: |
+            ./artifacts/packages/*.nupkg
+            ./artifacts/packages/*.snupkg
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./artifacts/test-results/**
+          if-no-files-found: warn
+          retention-days: 30

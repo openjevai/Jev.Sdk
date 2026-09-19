@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Jev.Sdk</RootNamespace>
+    <AssemblyName>Jev.Sdk</AssemblyName>
+    <PackageId>Jev.Sdk</PackageId>
+    <Description>.NET client for the TypeSafe AI System One API. Ask typed noul (yes/no), choice, and score questions about text or structured state, and get structured, probability-backed answers back.</Description>
+    <PackageTags>typesafe;systemone;jev;ai;classification;noul;choice;score;sdk;client</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsPackable>true</IsPackable>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

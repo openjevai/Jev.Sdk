@@ -1,0 +1,14 @@
+<Project>
+
+  <!-- The nearest Directory.Build.props wins, so the root one must be imported explicitly
+       rather than inherited. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!-- Test method names are prose: the underscore separates the unit under test from the
+         behaviour being asserted, which is the xunit convention and reads better in a failure
+         report than a camel-cased sentence. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+</Project>
