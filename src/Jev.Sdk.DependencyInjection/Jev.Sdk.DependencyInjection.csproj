@@ -8,6 +8,9 @@
     <PackageTags>typesafe;systemone;jev;sdk;dependency-injection;di</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IsPackable>true</IsPackable>
+    <!-- Kept in step with Jev.Sdk. The two ship together and a version skew between them would
+         be a support problem with no upside. -->
+    <Version>0.1.0</Version>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>

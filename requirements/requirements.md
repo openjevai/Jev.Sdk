@@ -484,7 +484,7 @@ non-breaking; removing one would not be.
 | # | Decision |
 | --- | --- |
 | D1 | Root namespace and package id: `Jev.Sdk` |
-| D2 | Async methods suffixed `Async`; `CancellationToken` required, no default |
+| D2 | Async methods suffixed `Async`; `CancellationToken` required, no default. Held library-wide, including `JevClientWarmup.WarmAsync`, which originally defaulted the token and was brought into line. Its `logger` parameter is consequently required too — C# does not allow a required parameter after an optional one — which is a language constraint rather than a change of intent, and is documented on the method |
 | D3 | CancellationToken honoured through every await, including retry delay |
 | D4 | Partial classes by function, then by size; header comment lists partials; 100 KB CI ceiling |
 | D5 | All I/O asynchronous; no sync surface, no sync-over-async, no file I/O in the core |
@@ -498,7 +498,7 @@ non-breaking; removing one would not be.
 | D13 | File-based configuration is loaded by the DI package at host startup |
 | D14 | Core seams are interfaces with built-in defaults |
 | D15 | Target framework: `net10.0` only |
-| D16 | Test framework: xunit (latest v3 line), pending a package-set verification probe |
+| D16 | Test framework: xunit. The probe resolved to the **v2 line** (`xunit` 2.9.3 with `xunit.runner.visualstudio` 3.1.4), not v3 as first written: v3's package set did not verify cleanly for a `net10.0` test project, and v2 is the combination that built and ran. The decision is recorded as what shipped, not as what was hoped for |
 | D17 | Licence: MIT |
 | D18 | Repository is local-only. Nothing is written to the Obsidian vault |
 | D19 | Throttling defaults match the vendor's SDKs: 2 retries, 500 ms initial backoff, 5 s backoff ceiling, 60 s Retry-After ceiling, 0.25 subtractive jitter, 10 s per-attempt timeout, retryable set 408/429/5xx |
@@ -556,13 +556,17 @@ non-breaking; removing one would not be.
 
 ## 7. Open Items
 
-| # | Item | Recommendation |
+O1–O4 were resolved during implementation; the table records what was decided and where it landed,
+because an item closed by *doing* the work is worth keeping as a record rather than deleting. O5 is
+the only item still genuinely open.
+
+| # | Item | Status |
 | --- | --- | --- |
-| O1 | JSON section name for file configuration: `Jev:ApiKey` vs flat `ApiKey` | `Jev:ApiKey` — namespaced sections avoid collision in a host's shared config |
-| O2 | Machine token source: `Environment.MachineName` vs a `MACHINE_NAME` env override | Use the env override when set, else `Environment.MachineName`; container hostnames are random per start, so the override keeps containers workable |
-| O3 | Exception type naming: `TypeSafe*` vs `Jev*` now that the namespace is `Jev.Sdk` | `Jev*`, for consistency with the namespace |
-| O4 | xunit v3 exact package set for a `net10.0` test project | Verify with a scratch restore before use |
-| O5 | NuGet publication | Build publish-ready (metadata, XML docs as errors, public-API baseline, SemVer from 0.1.0); do not publish |
+| O1 | JSON section name for file configuration: `Jev:ApiKey` vs flat `ApiKey` | **Resolved — `Jev:ApiKey`**, the recommendation. `JevEnvironment.ConfigurationSection` is `"Jev"`; `JevOptionsBinding.FromConfiguration` reads through `GetSection(JevEnvironment.ConfigurationSection)`, so the section name lives in one constant rather than being spelled at each use |
+| O2 | Machine token source: `Environment.MachineName` vs a `MACHINE_NAME` env override | **Resolved — the override when set, else `Environment.MachineName`**, the recommendation. `JevEnvironment.MachineNameVariable` is `"MACHINE_NAME"` |
+| O3 | Exception type naming: `TypeSafe*` vs `Jev*` now that the namespace is `Jev.Sdk` | **Resolved — `Jev*`**, the recommendation. All 14 error types under `src/Jev.Sdk/Errors/` are `Jev*`, with `JevException` as the single base |
+| O4 | xunit v3 exact package set for a `net10.0` test project | **Resolved — the v2 line.** The scratch restore settled it on `xunit` 2.9.3 plus `xunit.runner.visualstudio` 3.1.4, and D16 now records the outcome rather than the intent |
+| O5 | NuGet publication | **Open, and partially done.** Metadata, `PackageReadmeFile`, symbol packages, MIT, and an explicit `0.1.0` version are all in place; publication remains deliberately off. Still outstanding against the recommendation: a `PublicAPI.*.txt` baseline. Also to settle before any publish: `PackageProjectUrl` points at `github.com/robchartier/Jev.Sdk`, and the README says the workflow produces artifacts on every push to `main` — neither is true while the repository has no remote (D18) |
 
 ---
 

@@ -33,7 +33,7 @@ All notable changes to this project are documented here. The format follows
     watched.
   - `JevOptionsBinding` for reading options from the `Jev` configuration section.
 - `Jev.Sdk.Sample`, a minimal console client that exercises both endpoints by hand.
-- 206 tests covering serialization, forward compatibility, retries, error mapping, validation,
+- 439 tests covering serialization, forward compatibility, retries, error mapping, validation,
   configuration precedence, dependency injection, telemetry, and redaction.
 
 ### Notes

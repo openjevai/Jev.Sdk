@@ -31,18 +31,26 @@ public static partial class JevClientWarmup
     /// Fetches the model list so later cached reads are served without a request.
     /// </summary>
     /// <param name="client">The client to warm.</param>
-    /// <param name="logger">Optional logger, to record the outcome.</param>
+    /// <param name="logger">Logger to record the outcome, or null for silence.</param>
     /// <param name="cancellationToken">Cancels the warmup.</param>
     /// <returns>True when the model list was fetched.</returns>
     /// <remarks>
+    /// <para>
     /// A failure is logged and reported as <see langword="false"/> rather than thrown, so a host can
     /// treat warmup as best-effort without a try/catch. Cancellation does propagate, because a host
     /// that cancelled its own startup wants to know rather than silently continuing.
+    /// </para>
+    /// <para>
+    /// Neither parameter is optional, and the logger is required only because C# will not accept a
+    /// required parameter after an optional one. D2 locks the token as mandatory at every call site
+    /// - cancellation is a decision, not an oversight - and this is an I/O method, so it is not
+    /// exempt. Pass <see langword="null"/> for the logger when there is nothing to log to.
+    /// </para>
     /// </remarks>
     public static async Task<bool> WarmAsync(
         JevClient client,
-        ILogger? logger = null,
-        CancellationToken cancellationToken = default)
+        ILogger? logger,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(client);
 
