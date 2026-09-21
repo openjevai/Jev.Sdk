@@ -477,10 +477,50 @@ The client is split across partial classes by function, each file holding one co
 ```sh
 dotnet build Jev.Sdk.slnx
 dotnet test  Jev.Sdk.slnx
-dotnet pack  Jev.Sdk.slnx --configuration Release --output ./artifacts/packages
+
+# Pack with the version the build resolves, the same way the workflow does.
+VERSION="$(python3 eng/package_version.py)"
+dotnet pack Jev.Sdk.slnx --configuration Release --output ./artifacts/packages -p:Version="$VERSION"
 ```
 
 Requires the .NET 10 SDK. The project targets `net10.0` only.
+
+## Versioning
+
+One place declares the version — `VersionPrefix` in `Directory.Build.props` — and everything else
+is derived from it, so a workflow cannot disagree with the package about what was produced:
+
+```
+HEAD tagged v0.1.0        ->  0.1.0                 a release
+HEAD past that tag        ->  0.1.0-00de9391c      a candidate for the next release
+```
+
+The final segment is the first nine characters of the commit hash, which makes every build
+identifiable and traceable to a commit without a lookup.
+
+**The increment is declared, not computed.** A commit graph cannot tell you whether the next
+release is a patch, a minor, or a breaking change — that is a judgement about the API. So
+`VersionPrefix` is the version the next release *will* carry, and bumping it is the release
+decision. `0.x` minor bumps are treated as breaking, per SemVer's rule that anything may change
+before 1.0.
+
+The pre-release identifier form is used rather than a fourth version segment because that is the
+only shape NuGet accepts for a hash. `dotnet pack` was probed to establish this rather than
+assuming it:
+
+| Form | Result |
+| --- | --- |
+| `0.1.0.00de9391c` | **rejected** — "not a valid version string". The fourth segment of a four-part version must be numeric, and a hex hash contains letters |
+| `0.1.0+00de9391c` | accepted, but the artifact is `VProbe.0.1.0.nupkg` — NuGet strips build metadata from the package identity, so the hash would vanish |
+| `0.1.0-00de9391c` | accepted, artifact `VProbe.0.1.0-00de9391c.nupkg` — the hash is the final segment and visible in the name |
+
+A pre-release sorts *before* the release it precedes, which is the right order: an untagged build
+of `0.1.0` is a candidate for `0.1.0`, not a replacement for it. Building a commit that is `v0.1.0`
+exactly tagged drops the hash and produces the bare `0.1.0`, because the tag is the identity.
+
+The resolver refuses two mistakes rather than producing a package that is wrong quietly: a
+`VersionPrefix` that is semver-shaped but malformed, and a `VersionPrefix` below a version already
+tagged (NuGet would treat that package as older than what exists, and silently ignore it).
 
 ## Documentation
 

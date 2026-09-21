@@ -18,6 +18,16 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <!-- The one place the version is declared. Everything else derives from it:
+         eng/package_version.py reads this value and produces `<VersionPrefix>-<sha9>` for an
+         untagged build, or the bare version when HEAD carries the matching `v<VersionPrefix>`
+         tag. Never set <Version> in a project file - it would override the derived value, and
+         the workflow's consistency check exists precisely to catch a package whose version
+         disagrees with what was declared. -->
+    <VersionPrefix>0.1.0</VersionPrefix>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <Authors>deepseek-v4.1-flash (via Hermes Agent), under deep human review</Authors>
     <Company>Rob Chartier</Company>
     <Product>Jev.Sdk</Product>

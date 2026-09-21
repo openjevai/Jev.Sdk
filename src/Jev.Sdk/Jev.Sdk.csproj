@@ -8,10 +8,6 @@
     <PackageTags>typesafe;systemone;jev;ai;classification;noul;choice;score;sdk;client</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IsPackable>true</IsPackable>
-    <!-- Declared explicitly. Without it, pack falls back to MSBuild's default 1.0.0, which would
-         label an unpublished, pre-1.0 library as a 1.0 release on every artifact the build
-         produces. D17/O5: SemVer, starting from 0.1.0. -->
-    <Version>0.1.0</Version>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>

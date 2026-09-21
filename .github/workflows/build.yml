@@ -19,22 +19,49 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # fetch-depth: 0 because the version carries the commit hash and the release path
+      # asks git whether HEAD is tagged. A shallow clone cannot answer either question.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
+      # ---------------------------------------------------------------------
+      # Decide the version before anything else. One place declares it
+      # (VersionPrefix in Directory.Build.props); this derives the build version
+      # from it and the commit, so no workflow can disagree with the package.
+      # ---------------------------------------------------------------------
+
+      - name: Determine the version
+        id: version
+        run: |
+          VERSION="$(python3 eng/package_version.py)"
+          PREFIX="$(python3 eng/package_version.py --prefix)"
+          SHA="$(python3 eng/package_version.py --sha)"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "prefix=$PREFIX"   >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA"         >> "$GITHUB_OUTPUT"
+
+          echo "Declared prefix : $PREFIX"
+          echo "Commit segment  : $SHA"
+          echo "Build version   : $VERSION"
+
       - name: Restore
         run: dotnet restore Jev.Sdk.slnx
 
       - name: Build
         run: dotnet build Jev.Sdk.slnx --configuration Release --no-restore
+             -p:Version=${{ steps.version.outputs.version }}
 
       - name: Test
         run: dotnet test Jev.Sdk.slnx --configuration Release --no-build
+             -p:Version=${{ steps.version.outputs.version }}
              --collect:"XPlat Code Coverage"
              --results-directory ./artifacts/test-results
 
@@ -43,20 +70,54 @@ jobs:
 
       - name: Pack
         run: dotnet pack Jev.Sdk.slnx --configuration Release --no-build
+             -p:Version=${{ steps.version.outputs.version }}
              --output ./artifacts/packages
+
+      # A pack that silently produced the wrong version - or produced nothing, because a
+      # project set <Version> and overrode the derived value - would otherwise be caught
+      # only by whoever downloaded the artifact. Assert the expected file exists by name.
+      - name: Verify the produced packages carry the derived version
+        run: |
+          EXPECTED="${{ steps.version.outputs.version }}"
+          echo "Expected version: $EXPECTED"
+          FAILED=0
+
+          for id in Jev.Sdk Jev.Sdk.DependencyInjection; do
+            if [ -f "./artifacts/packages/${id}.${EXPECTED}.nupkg" ]; then
+              echo "  ok   ${id}.${EXPECTED}.nupkg"
+            else
+              echo "::error::${id}.${EXPECTED}.nupkg was not produced. Found:"
+              ls -la ./artifacts/packages || true
+              FAILED=1
+            fi
+          done
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::A package version disagrees with VersionPrefix ${{ steps.version.outputs.prefix }} and commit ${{ steps.version.outputs.sha }}."
+            echo "::error::Check for a <Version> property in a project file - it overrides the derived value."
+            exit 1
+          fi
 
       - name: Report package contents
         run: |
-          echo "### NuGet packages produced" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          ls -la ./artifacts/packages >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### NuGet packages produced"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Declared prefix | \`${{ steps.version.outputs.prefix }}\` |"
+            echo "| Commit segment | \`${{ steps.version.outputs.sha }}\` |"
+            echo "| Package version | \`${{ steps.version.outputs.version }}\` |"
+            echo ""
+            echo '```'
+            ls -la ./artifacts/packages
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload NuGet packages
         uses: actions/upload-artifact@v4
         with:
-          name: nuget-packages
+          name: nuget-packages-${{ steps.version.outputs.version }}
           path: |
             ./artifacts/packages/*.nupkg
             ./artifacts/packages/*.snupkg
