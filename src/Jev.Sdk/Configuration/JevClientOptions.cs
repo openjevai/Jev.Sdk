@@ -29,6 +29,16 @@ public sealed class JevClientOptions
     public const string DefaultModelName = "jev-latest";
 
     /// <summary>
+    /// The OpenJEV API base address. OpenJEV (https://openjev.sh) is a free community gateway to
+    /// the same Jev model. Used when <c>JEV_PROVIDER=openjev</c> is set, or when only
+    /// <c>OPENJEV_API_KEY</c> is present. TypeSafe remains the default.
+    /// </summary>
+    public static readonly Uri OpenjevBaseAddress = new("https://api.openjev.sh/v1/");
+
+    /// <summary>The model id used by the OpenJEV gateway.</summary>
+    public const string OpenjevModelName = "openjev";
+
+    /// <summary>
     /// The API key. When set, this is the highest-priority key source and no environment variable
     /// or configuration file is consulted. Its absence is normal, not an error.
     /// </summary>

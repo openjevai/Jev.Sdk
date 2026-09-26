@@ -7,6 +7,11 @@ Ask typed questions about a body of content and get structured, probability-back
 Every question is declared with a kind and answered within the constraints you supplied, so
 nothing has to be parsed out of prose.
 
+> **OpenJEV support:** Jev is built by [TypeSafe](https://typesafe.ai). This fork keeps TypeSafe as
+> the default and adds optional support for [OpenJEV](https://openjev.sh), a free community gateway
+> to the same Jev model — set `OPENJEV_API_KEY` (or `JEV_PROVIDER=openjev`) to use it. Original
+> project: https://github.com/nothingmn/Jev.Sdk by @nothingmn.
+
 ## Not affiliated
 
 This is an independent client library. It is **not** affiliated with, sponsored by, or endorsed

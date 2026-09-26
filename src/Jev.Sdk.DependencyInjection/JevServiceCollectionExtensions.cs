@@ -78,9 +78,24 @@ public static class JevServiceCollectionExtensions
         // constructed with this provider, which replaces its own ladder, so a key that is absent here
         // is a key the client cannot see. Omitting it made an explicit options key lose to the
         // environment variable, contradicting the documented order.
+        //
+        // OpenJEV support (https://openjev.sh) is additive. When JEV_PROVIDER=openjev is set the
+        // OpenJEV env key is preferred over the TypeSafe env key; otherwise the TypeSafe env key is
+        // tried first (the unchanged default) and the OpenJEV env key is a fallback. A caller with a
+        // TypeSafe key sees no change. The settings-file provider is always last.
+        Func<string, string?> read = Environment.GetEnvironmentVariable;
+        bool forceOpenjev = string.Equals(
+            read(JevEnvironment.ProviderVariable), "openjev", StringComparison.OrdinalIgnoreCase);
+
+        IApiKeyProvider envProvider = forceOpenjev
+            ? new EnvironmentApiKeyProvider(JevEnvironment.OpenjevApiKeyVariable)
+            : new ChainedApiKeyProvider(
+                new EnvironmentApiKeyProvider(),
+                new EnvironmentApiKeyProvider(JevEnvironment.OpenjevApiKeyVariable));
+
         return new ChainedApiKeyProvider(
             ExplicitKeyFromOptions(provider),
-            new EnvironmentApiKeyProvider(),
+            envProvider,
             config is null ? null : new ConfigurationApiKeyProvider(config));
     }
 

@@ -9,6 +9,10 @@
 // the same behaviour here without editing code. This type applies them to an options object,
 // leaving an explicitly-set option alone: the environment supplies a default, it does not override
 // a decision the caller made in code.
+//
+// OpenJEV support (https://openjev.sh) is additive: TypeSafe stays the default. The OpenJEV
+// gateway is selected only when JEV_PROVIDER=openjev is set, or when OPENJEV_API_KEY is present and
+// no TypeSafe key is. A caller with a TypeSafe key sees no change.
 
 namespace Jev.Sdk;
 
@@ -39,6 +43,22 @@ public static class EnvironmentOptionsProvider
 
         Func<string, string?> read = readVariable ?? Environment.GetEnvironmentVariable;
 
+        // OpenJEV provider selection (additive; TypeSafe stays the default). When OpenJEV is
+        // selected, the base address and model switch to the OpenJEV defaults — but only when the
+        // caller has not already set them, so an explicit choice in code is always honoured.
+        if (ShouldUseOpenjev(read))
+        {
+            if (options.BaseAddress == JevClientOptions.DefaultBaseAddress)
+            {
+                options.BaseAddress = JevClientOptions.OpenjevBaseAddress;
+            }
+
+            if (options.DefaultModel == JevClientOptions.DefaultModelName)
+            {
+                options.DefaultModel = JevClientOptions.OpenjevModelName;
+            }
+        }
+
         if (options.BaseAddress == JevClientOptions.DefaultBaseAddress)
         {
             string? baseUrl = read(JevEnvironment.BaseUrlVariable);
@@ -61,5 +81,33 @@ public static class EnvironmentOptionsProvider
         }
 
         return options;
+    }
+
+    /// <summary>
+    /// Decides whether the OpenJEV gateway should be used, following the documented selection
+    /// rule: an explicit <c>JEV_PROVIDER=openjev</c> wins; otherwise TypeSafe is the default when
+    /// its key is set; otherwise OpenJEV is used when only <c>OPENJEV_API_KEY</c> is present.
+    /// </summary>
+    private static bool ShouldUseOpenjev(Func<string, string?> read)
+    {
+        string? provider = read(JevEnvironment.ProviderVariable);
+
+        if (string.Equals(provider, "openjev", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // TypeSafe stays the default when its key is set.
+        string? typesafeKey = read(JevEnvironment.ApiKeyVariable);
+
+        if (!string.IsNullOrWhiteSpace(typesafeKey))
+        {
+            return false;
+        }
+
+        // Otherwise OpenJEV is used only when its key is present.
+        string? openjevKey = read(JevEnvironment.OpenjevApiKeyVariable);
+
+        return !string.IsNullOrWhiteSpace(openjevKey);
     }
 }

@@ -151,9 +151,24 @@ public sealed partial class JevClient : IDisposable
         // Priority order, highest first: an explicit key, then the environment variable. The
         // settings files participate through the dependency-injection package, which loads them
         // at host startup; the core library performs no file I/O.
+        //
+        // OpenJEV support (https://openjev.sh) is additive. When JEV_PROVIDER=openjev is set the
+        // OpenJEV key is preferred; otherwise the TypeSafe key is tried first (the unchanged
+        // default) and the OpenJEV key is a fallback used only when no TypeSafe key is present.
+        // A caller with a TypeSafe key sees no change.
+        Func<string, string?> read = Environment.GetEnvironmentVariable;
+        bool forceOpenjev = string.Equals(
+            read(JevEnvironment.ProviderVariable), "openjev", StringComparison.OrdinalIgnoreCase);
+
+        IApiKeyProvider envProvider = forceOpenjev
+            ? new EnvironmentApiKeyProvider(JevEnvironment.OpenjevApiKeyVariable)
+            : new ChainedApiKeyProvider(
+                new EnvironmentApiKeyProvider(JevEnvironment.ApiKeyVariable),
+                new EnvironmentApiKeyProvider(JevEnvironment.OpenjevApiKeyVariable));
+
         return new ChainedApiKeyProvider(
             options.ApiKey is { Length: > 0 } key ? new StaticApiKeyProvider(key) : null,
-            new EnvironmentApiKeyProvider());
+            envProvider);
     }
 
     private async Task<string> ResolveApiKeyAsync(CancellationToken cancellationToken)
@@ -164,7 +179,8 @@ public sealed partial class JevClient : IDisposable
         {
             throw new JevConfigurationException(
                 "No API key was found. Supply one by passing it to the JevClient constructor, by setting " +
-                $"the {JevEnvironment.ApiKeyVariable} environment variable, or by setting " +
+                $"the {JevEnvironment.ApiKeyVariable} environment variable (or {JevEnvironment.OpenjevApiKeyVariable} " +
+                "for the OpenJEV gateway), or by setting " +
                 $"{JevEnvironment.ConfigurationSection}:{JevEnvironment.ApiKeyKey} in " +
                 $"{JevEnvironment.GenericSettingsFile} or appSettings.<MACHINE_NAME>.json " +
                 "(the settings files are read by the Jev.Sdk.DependencyInjection package).");

@@ -36,6 +36,22 @@ public static class JevEnvironment
     public const string DefaultModelVariable = "TYPESAFE_DEFAULT_MODEL";
 
     /// <summary>
+    /// Environment variable selecting the Jev provider. Set to <c>openjev</c> to force the
+    /// OpenJEV gateway (https://openjev.sh), a free community gateway to the same Jev model;
+    /// otherwise TypeSafe stays the default and OpenJEV is used only when no TypeSafe key is
+    /// present. The comparison is case-insensitive.
+    /// </summary>
+    public const string ProviderVariable = "JEV_PROVIDER";
+
+    /// <summary>
+    /// Environment variable holding an OpenJEV API key. When set and no TypeSafe key is present,
+    /// the client sends requests to OpenJEV; <see cref="ProviderVariable"/> set to
+    /// <c>openjev</c> forces it regardless of the TypeSafe key. This is a community gateway and
+    /// is never the default.
+    /// </summary>
+    public const string OpenjevApiKeyVariable = "OPENJEV_API_KEY";
+
+    /// <summary>
     /// Configuration file holding the client's settings, read once at startup and never watched
     /// for changes.
     /// </summary>
